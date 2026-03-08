@@ -15,10 +15,68 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 const APIFY_TOKEN = process.env.APIFY_API_TOKEN;
+const HUNTER_API_KEY = process.env.HUNTER_API_KEY;
 
 // Store for leads (in-memory for serverless)
 let allLeads = [];
 let seenEmails = new Set();
+
+// Hunter.io: Find email from domain
+async function findEmailWithHunter(domain, firstName, lastName) {
+  if (!HUNTER_API_KEY) return null;
+  
+  try {
+    let url = `https://api.hunter.io/v2/email-finder?domain=${encodeURIComponent(domain)}&api_key=${HUNTER_API_KEY}`;
+    if (firstName) url += `&first_name=${encodeURIComponent(firstName)}`;
+    if (lastName) url += `&last_name=${encodeURIComponent(lastName)}`;
+    
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    if (data.data?.email) {
+      return {
+        email: data.data.email,
+        confidence: data.data.confidence,
+        verified: data.data.verification?.status === 'valid'
+      };
+    }
+  } catch (err) {
+    console.log('Hunter email finder error:', err.message);
+  }
+  return null;
+}
+
+// Hunter.io: Verify email
+async function verifyEmailWithHunter(email) {
+  if (!HUNTER_API_KEY || !email) return null;
+  
+  try {
+    const response = await fetch(
+      `https://api.hunter.io/v2/email-verifier?email=${encodeURIComponent(email)}&api_key=${HUNTER_API_KEY}`
+    );
+    const data = await response.json();
+    
+    return {
+      email: email,
+      status: data.data?.status,
+      score: data.data?.score,
+      verified: data.data?.status === 'valid'
+    };
+  } catch (err) {
+    console.log('Hunter verify error:', err.message);
+  }
+  return null;
+}
+
+// Extract domain from URL
+function extractDomain(url) {
+  try {
+    const hostname = new URL(url).hostname;
+    return hostname.replace('www.', '');
+  } catch {
+    return null;
+  }
+}
 
 // Helper: Call Apify API directly
 async function callApifyActor(actorId, input) {
@@ -194,12 +252,46 @@ app.post('/api/extract', async (req, res) => {
       }
     }
 
-    allLeads = results;
+    // Enrich leads with Hunter.io (only for leads without email)
+    const enrichedResults = [];
+    let hunterCreditsUsed = 0;
+    const MAX_HUNTER_CALLS = 5; // Limit to save credits
+    
+    for (const lead of results) {
+      // If already has email, verify it
+      if (lead.email) {
+        const verified = await verifyEmailWithHunter(lead.email);
+        if (verified?.verified) {
+          lead.emailVerified = true;
+          enrichedResults.push(lead);
+        }
+        hunterCreditsUsed++;
+      } 
+      // If no email but has URL, try to find email
+      else if (lead.url && hunterCreditsUsed < MAX_HUNTER_CALLS) {
+        const domain = extractDomain(lead.url);
+        if (domain && !domain.includes('google.') && !domain.includes('reddit.')) {
+          const found = await findEmailWithHunter(domain, null, null);
+          if (found?.email) {
+            lead.email = found.email;
+            lead.emailVerified = found.verified;
+            lead.emailConfidence = found.confidence;
+            enrichedResults.push(lead);
+          }
+          hunterCreditsUsed++;
+        }
+      }
+    }
+    
+    // Only return leads with emails
+    const leadsWithEmail = enrichedResults.filter(l => l.email);
+    allLeads = leadsWithEmail;
     
     res.json({ 
       success: true, 
-      count: results.length,
-      leads: results
+      count: leadsWithEmail.length,
+      leads: leadsWithEmail,
+      hunterCreditsUsed: hunterCreditsUsed
     });
   } catch (err) {
     console.error('Extraction error:', err);
