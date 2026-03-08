@@ -179,35 +179,36 @@ app.post('/api/extract', async (req, res) => {
         }
       }
 
-      // Reddit
+      // Reddit (via Google - free)
       if (platforms.includes('reddit')) {
-        console.log(`Searching Reddit for: ${keyword}`);
+        console.log(`Searching Reddit via Google for: ${keyword}`);
         try {
-          const items = await callApifyActor('trudax~reddit-scraper', {
-            searches: [keyword],
-            maxPostsPerSearch: Math.min(maxResults, 30),
-            searchPosts: true,
-            searchComments: false,
-            sort: 'new'
+          const items = await callApifyActor('apify~google-search-scraper', {
+            queries: `site:reddit.com "${keyword}"`,
+            maxPagesPerQuery: 1,
+            resultsPerPage: Math.min(maxResults, 30),
+            countryCode: region === 'all' ? 'us' : region,
+            languageCode: 'en'
           });
           
-          for (const post of items) {
-            const lead = {
-              name: post.author || 'Unknown',
-              email: extractEmail(post.body || post.title || ''),
-              phone: '',
-              source: 'Reddit',
-              query: keyword,
-              title: post.title,
-              url: post.url || `https://reddit.com${post.permalink}`,
-              snippet: (post.body || '').substring(0, 300),
-              subreddit: post.subreddit,
-              extractedAt: new Date().toISOString()
-            };
-            
-            if (!lead.email || !seenEmails.has(lead.email.toLowerCase())) {
-              if (lead.email) seenEmails.add(lead.email.toLowerCase());
-              results.push(lead);
+          if (items[0]?.organicResults) {
+            for (const result of items[0].organicResults) {
+              const lead = {
+                name: extractName(result.title),
+                email: extractEmail(result.description || ''),
+                phone: '',
+                source: 'Reddit',
+                query: keyword,
+                title: result.title,
+                url: result.url,
+                snippet: result.description || '',
+                extractedAt: new Date().toISOString()
+              };
+              
+              if (!lead.email || !seenEmails.has(lead.email.toLowerCase())) {
+                if (lead.email) seenEmails.add(lead.email.toLowerCase());
+                results.push(lead);
+              }
             }
           }
         } catch (err) {
