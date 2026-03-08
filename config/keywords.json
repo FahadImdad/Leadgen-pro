@@ -1,0 +1,31 @@
+{
+  "services": [
+    "book publishing",
+    "publish my book",
+    "need book publisher",
+    "self publishing",
+    "web development",
+    "website developer",
+    "need website",
+    "build website",
+    "web design",
+    "marketing services",
+    "digital marketing",
+    "social media marketing",
+    "graphic design",
+    "logo design",
+    "book cover design",
+    "illustration",
+    "illustrator needed"
+  ],
+  "platforms": {
+    "upwork": true,
+    "fiverr": false,
+    "thumbtack": true,
+    "reddit": true,
+    "craigslist": true,
+    "google": true
+  },
+  "regions": ["US", "UK", "CA", "AU"],
+  "timeframe": "24h"
+}

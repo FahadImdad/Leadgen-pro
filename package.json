@@ -1,0 +1,30 @@
+{
+  "name": "lead-extractor",
+  "version": "1.0.0",
+  "description": "Extract fresh leads from multiple platforms (Upwork, Reddit, Google, etc.)",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server.js",
+    "cli": "node index.js",
+    "extract": "node index.js",
+    "demo": "node index.js --keywords 'book publishing' --platforms 'google' --max 20",
+    "test": "node index.js --help"
+  },
+  "keywords": [
+    "leads",
+    "scraping",
+    "upwork",
+    "b2b"
+  ],
+  "author": "Fahad",
+  "license": "MIT",
+  "dependencies": {
+    "apify-client": "^2.9.0",
+    "cors": "^2.8.6",
+    "dotenv": "^16.0.0",
+    "express": "^5.2.1",
+    "serpapi": "^2.0.0",
+    "uuid": "^9.0.0",
+    "xlsx": "^0.18.5"
+  }
+}

@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LeadGen Pro - AI Lead Extraction System</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    :root {
+      --primary: #6366f1;
+      --primary-dark: #4f46e5;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --bg-dark: #0f172a;
+      --bg-card: #1e293b;
+      --bg-input: #334155;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --border: #334155;
+    }
+    
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-dark);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    
+    /* Sidebar */
+    .sidebar {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: 260px;
+      height: 100vh;
+      background: var(--bg-card);
+      border-right: 1px solid var(--border);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding-bottom: 25px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 25px;
+    }
+    
+    .logo-icon {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, var(--primary), #8b5cf6);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.4rem;
+    }
+    
+    .logo-text {
+      font-weight: 700;
+      font-size: 1.3rem;
+    }
+    
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 15px;
+      border-radius: 8px;
+      color: var(--text-muted);
+      text-decoration: none;
+      margin-bottom: 5px;
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+    
+    .nav-item:hover, .nav-item.active {
+      background: var(--bg-input);
+      color: var(--text);
+    }
+    
+    .nav-item.active {
+      background: var(--primary);
+      color: white;
+    }
+    
+    .sidebar-footer {
+      margin-top: auto;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+    }
+    
+    .status-card {
+      background: var(--bg-input);
+      padding: 15px;
+      border-radius: 10px;
+    }
+    
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 8px;
+    }
+    
+    .status-dot.online { background: var(--success); }
+    .status-dot.offline { background: var(--danger); }
+    
+    /* Main Content */
+    .main {
+      margin-left: 260px;
+      padding: 30px;
+      min-height: 100vh;
+    }
+    
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 30px;
+    }
+    
+    .header h1 {
+      font-size: 1.8rem;
+      font-weight: 700;
+    }
+    
+    .header-stats {
+      display: flex;
+      gap: 20px;
+    }
+    
+    .stat-card {
+      background: var(--bg-card);
+      padding: 15px 25px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+    }
+    
+    .stat-value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--primary);
+    }
+    
+    .stat-label {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+    
+    /* Extraction Form */
+    .extraction-panel {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 25px;
+      margin-bottom: 30px;
+    }
+    
+    .card {
+      background: var(--bg-card);
+      border-radius: 15px;
+      padding: 25px;
+      border: 1px solid var(--border);
+    }
+    
+    .card-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .form-group {
+      margin-bottom: 20px;
+    }
+    
+    .form-label {
+      display: block;
+      font-size: 0.9rem;
+      font-weight: 500;
+      margin-bottom: 8px;
+      color: var(--text-muted);
+    }
+    
+    .form-input, .form-select {
+      width: 100%;
+      padding: 12px 15px;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 0.95rem;
+    }
+    
+    .form-input:focus, .form-select:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+    }
+    
+    .form-input::placeholder {
+      color: var(--text-muted);
+    }
+    
+    .form-select {
+      cursor: pointer;
+    }
+    
+    textarea.form-input {
+      min-height: 100px;
+      resize: vertical;
+    }
+    
+    /* Platform Grid */
+    .platform-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+    
+    .platform-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px;
+      background: var(--bg-input);
+      border: 2px solid transparent;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .platform-item:hover {
+      border-color: var(--primary);
+    }
+    
+    .platform-item.selected {
+      border-color: var(--primary);
+      background: rgba(99, 102, 241, 0.15);
+    }
+    
+    .platform-item input {
+      display: none;
+    }
+    
+    .platform-icon {
+      font-size: 1.3rem;
+    }
+    
+    .platform-name {
+      font-size: 0.9rem;
+      font-weight: 500;
+    }
+    
+    .platform-status {
+      font-size: 0.7rem;
+      color: var(--success);
+      margin-left: auto;
+    }
+    
+    /* Filters Row */
+    .filters-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 15px;
+    }
+    
+    /* Buttons */
+    .btn {
+      padding: 12px 25px;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary), #8b5cf6);
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 20px rgba(99, 102, 241, 0.4);
+    }
+    
+    .btn-primary:disabled {
+      opacity: 0.6;
+      transform: none;
+      cursor: not-allowed;
+    }
+    
+    .btn-secondary {
+      background: var(--bg-input);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    
+    .btn-secondary:hover {
+      background: var(--border);
+    }
+    
+    .btn-success {
+      background: var(--success);
+      color: white;
+    }
+    
+    .btn-lg {
+      padding: 15px 35px;
+      font-size: 1.05rem;
+    }
+    
+    /* Results Table */
+    .results-card {
+      grid-column: 1 / -1;
+    }
+    
+    .results-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    
+    .results-count {
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+    
+    .results-count span {
+      color: var(--primary);
+    }
+    
+    .results-actions {
+      display: flex;
+      gap: 10px;
+    }
+    
+    .table-container {
+      overflow-x: auto;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+    }
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    
+    th {
+      background: var(--bg-input);
+      padding: 14px 16px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+    }
+    
+    td {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.9rem;
+    }
+    
+    tr:hover {
+      background: rgba(255,255,255,0.02);
+    }
+    
+    .truncate {
+      max-width: 180px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    
+    /* Source Badges */
+    .badge {
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    
+    .badge-google { background: #4285f422; color: #60a5fa; }
+    .badge-reddit { background: #ff450022; color: #fb923c; }
+    .badge-facebook { background: #1877f222; color: #60a5fa; }
+    .badge-instagram { background: #e4405f22; color: #f472b6; }
+    .badge-twitter { background: #1da1f222; color: #38bdf8; }
+    .badge-upwork { background: #6fda4422; color: #4ade80; }
+    .badge-fiverr { background: #1dbf7322; color: #34d399; }
+    
+    /* Loading State */
+    .loading-overlay {
+      position: fixed;
+      top: 0;
+      left: 260px;
+      right: 0;
+      bottom: 0;
+      background: rgba(15, 23, 42, 0.9);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    
+    .loading-spinner {
+      width: 60px;
+      height: 60px;
+      border: 4px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 20px;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    .loading-text {
+      font-size: 1.1rem;
+      color: var(--text-muted);
+    }
+    
+    .loading-progress {
+      margin-top: 15px;
+      font-size: 0.9rem;
+      color: var(--primary);
+    }
+    
+    .hidden { display: none !important; }
+    
+    /* Empty State */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-muted);
+    }
+    
+    .empty-icon {
+      font-size: 4rem;
+      margin-bottom: 20px;
+      opacity: 0.5;
+    }
+    
+    /* Responsive */
+    @media (max-width: 1024px) {
+      .sidebar { width: 80px; padding: 15px; }
+      .logo-text, .nav-item span:not(.nav-icon) { display: none; }
+      .main { margin-left: 80px; }
+      .extraction-panel { grid-template-columns: 1fr; }
+      .platform-grid { grid-template-columns: repeat(2, 1fr); }
+      .filters-row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-icon">🎯</div>
+      <span class="logo-text">LeadGen Pro</span>
+    </div>
+    
+    <nav>
+      <a class="nav-item active">
+        <span class="nav-icon">🔍</span>
+        <span>Extract Leads</span>
+      </a>
+      <a class="nav-item">
+        <span class="nav-icon">📊</span>
+        <span>Dashboard</span>
+      </a>
+      <a class="nav-item">
+        <span class="nav-icon">📁</span>
+        <span>History</span>
+      </a>
+      <a class="nav-item">
+        <span class="nav-icon">⚙️</span>
+        <span>Settings</span>
+      </a>
+    </nav>
+    
+    <div class="sidebar-footer">
+      <div class="status-card">
+        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px;">API Status</div>
+        <div id="apiStatus">
+          <span class="status-dot offline"></span>
+          <span style="font-size: 0.9rem;">Checking...</span>
+        </div>
+        <div id="apiPlan" style="font-size: 0.75rem; color: var(--text-muted); margin-top: 5px;"></div>
+      </div>
+    </div>
+  </aside>
+  
+  <!-- Main Content -->
+  <main class="main">
+    <div class="header">
+      <div>
+        <h1>Extract Leads</h1>
+        <p style="color: var(--text-muted); margin-top: 5px;">Find fresh leads from multiple platforms</p>
+      </div>
+      <div class="header-stats">
+        <div class="stat-card">
+          <div class="stat-value" id="totalExtracted">0</div>
+          <div class="stat-label">Total Extracted</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="uniqueEmails">0</div>
+          <div class="stat-label">With Email</div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="extraction-panel">
+      <!-- Keywords Card -->
+      <div class="card">
+        <div class="card-title">🔑 Keywords & Services</div>
+        <div class="form-group">
+          <label class="form-label">Enter keywords (one per line)</label>
+          <textarea class="form-input" id="keywords" placeholder="book publishing
+web development
+marketing services
+graphic design
+illustration services">book publishing
+web development</textarea>
+        </div>
+      </div>
+      
+      <!-- Platforms Card -->
+      <div class="card">
+        <div class="card-title">📱 Platforms</div>
+        <div class="platform-grid">
+          <label class="platform-item selected">
+            <input type="checkbox" name="platform" value="google" checked>
+            <span class="platform-icon">🔍</span>
+            <span class="platform-name">Google</span>
+            <span class="platform-status">✓</span>
+          </label>
+          <label class="platform-item selected">
+            <input type="checkbox" name="platform" value="reddit" checked>
+            <span class="platform-icon">🤖</span>
+            <span class="platform-name">Reddit</span>
+            <span class="platform-status">✓</span>
+          </label>
+          <label class="platform-item">
+            <input type="checkbox" name="platform" value="facebook">
+            <span class="platform-icon">📘</span>
+            <span class="platform-name">Facebook</span>
+          </label>
+          <label class="platform-item">
+            <input type="checkbox" name="platform" value="instagram">
+            <span class="platform-icon">📸</span>
+            <span class="platform-name">Instagram</span>
+          </label>
+          <label class="platform-item">
+            <input type="checkbox" name="platform" value="twitter">
+            <span class="platform-icon">🐦</span>
+            <span class="platform-name">Twitter</span>
+          </label>
+          <label class="platform-item">
+            <input type="checkbox" name="platform" value="upwork">
+            <span class="platform-icon">💼</span>
+            <span class="platform-name">Upwork</span>
+          </label>
+        </div>
+      </div>
+      
+      <!-- Filters Card -->
+      <div class="card" style="grid-column: 1 / -1;">
+        <div class="card-title">🎛️ Filters</div>
+        <div class="filters-row">
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label">Region</label>
+            <select class="form-select" id="region">
+              <option value="us">🇺🇸 United States</option>
+              <option value="uk">🇬🇧 United Kingdom</option>
+              <option value="ca">🇨🇦 Canada</option>
+              <option value="au">🇦🇺 Australia</option>
+              <option value="all">🌍 All Regions</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label">Timeframe</label>
+            <select class="form-select" id="timeframe">
+              <option value="d">Last 24 Hours</option>
+              <option value="w">Last 7 Days</option>
+              <option value="m">Last 30 Days</option>
+              <option value="all">All Time</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label class="form-label">Max Results Per Platform</label>
+            <select class="form-select" id="maxResults">
+              <option value="10">10 results</option>
+              <option value="20" selected>20 results</option>
+              <option value="50">50 results</option>
+              <option value="100">100 results</option>
+            </select>
+          </div>
+        </div>
+        
+        <div style="margin-top: 25px; display: flex; gap: 15px;">
+          <button class="btn btn-primary btn-lg" id="extractBtn" onclick="startExtraction()">
+            🚀 Start Extraction
+          </button>
+          <button class="btn btn-secondary" onclick="resetForm()">
+            🔄 Reset
+          </button>
+        </div>
+      </div>
+      
+      <!-- Results Card -->
+      <div class="card results-card" id="resultsCard">
+        <div class="results-header">
+          <div class="results-count">
+            <span id="resultsCount">0</span> Leads Found
+          </div>
+          <div class="results-actions">
+            <button class="btn btn-secondary" onclick="copyEmails()">📋 Copy Emails</button>
+            <button class="btn btn-success" onclick="exportExcel()">📥 Export Excel</button>
+          </div>
+        </div>
+        
+        <div id="emptyState" class="empty-state">
+          <div class="empty-icon">📭</div>
+          <h3>No leads yet</h3>
+          <p style="margin-top: 10px;">Configure your settings above and click "Start Extraction"</p>
+        </div>
+        
+        <div class="table-container hidden" id="tableContainer">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th>Source</th>
+                <th>Service/Query</th>
+                <th>Title</th>
+                <th>Link</th>
+              </tr>
+            </thead>
+            <tbody id="resultsBody">
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+  
+  <!-- Loading Overlay -->
+  <div class="loading-overlay hidden" id="loadingOverlay">
+    <div class="loading-spinner"></div>
+    <div class="loading-text" id="loadingText">Initializing extraction...</div>
+    <div class="loading-progress" id="loadingProgress"></div>
+  </div>
+  
+  <script>
+    let allLeads = [];
+    
+    // Platform checkbox styling
+    document.querySelectorAll('.platform-item').forEach(item => {
+      const checkbox = item.querySelector('input');
+      checkbox.addEventListener('change', () => {
+        item.classList.toggle('selected', checkbox.checked);
+        const status = item.querySelector('.platform-status');
+        if (status) status.textContent = checkbox.checked ? '✓' : '';
+      });
+    });
+    
+    // Check API status
+    async function checkStatus() {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        
+        const statusEl = document.getElementById('apiStatus');
+        const planEl = document.getElementById('apiPlan');
+        
+        if (data.connected) {
+          statusEl.innerHTML = `<span class="status-dot online"></span><span style="font-size: 0.9rem;">Connected</span>`;
+          planEl.textContent = `${data.user} • ${data.plan} Plan`;
+        } else {
+          statusEl.innerHTML = `<span class="status-dot offline"></span><span style="font-size: 0.9rem;">Disconnected</span>`;
+        }
+      } catch (err) {
+        document.getElementById('apiStatus').innerHTML = `<span class="status-dot offline"></span><span style="font-size: 0.9rem;">Error</span>`;
+      }
+    }
+    
+    // Start extraction
+    async function startExtraction() {
+      const keywords = document.getElementById('keywords').value
+        .split('\n')
+        .map(k => k.trim())
+        .filter(k => k);
+      
+      const platforms = Array.from(document.querySelectorAll('input[name="platform"]:checked'))
+        .map(el => el.value);
+      
+      const region = document.getElementById('region').value;
+      const timeframe = document.getElementById('timeframe').value;
+      const maxResults = parseInt(document.getElementById('maxResults').value);
+      
+      if (keywords.length === 0) {
+        alert('Please enter at least one keyword');
+        return;
+      }
+      
+      if (platforms.length === 0) {
+        alert('Please select at least one platform');
+        return;
+      }
+      
+      // Show loading
+      document.getElementById('loadingOverlay').classList.remove('hidden');
+      document.getElementById('extractBtn').disabled = true;
+      document.getElementById('loadingText').textContent = 'Connecting to platforms...';
+      document.getElementById('loadingProgress').textContent = '';
+      
+      try {
+        let progress = 0;
+        const totalSteps = keywords.length * platforms.length;
+        
+        const res = await fetch('/api/extract', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ keywords, platforms, maxResults, region, timeframe })
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+          allLeads = data.leads;
+          displayResults(data.leads);
+          updateStats(data.leads);
+        } else {
+          alert('Error: ' + data.error);
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+      } finally {
+        document.getElementById('loadingOverlay').classList.add('hidden');
+        document.getElementById('extractBtn').disabled = false;
+      }
+    }
+    
+    // Display results
+    function displayResults(leads) {
+      document.getElementById('resultsCount').textContent = leads.length;
+      document.getElementById('emptyState').classList.toggle('hidden', leads.length > 0);
+      document.getElementById('tableContainer').classList.toggle('hidden', leads.length === 0);
+      
+      const tbody = document.getElementById('resultsBody');
+      tbody.innerHTML = '';
+      
+      leads.forEach(lead => {
+        const badgeClass = `badge-${(lead.source || '').toLowerCase()}`;
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${lead.name || '-'}</td>
+          <td style="color: ${lead.email ? 'var(--success)' : 'var(--text-muted)'}; font-weight: ${lead.email ? '500' : '400'};">${lead.email || '-'}</td>
+          <td>${lead.phone || '-'}</td>
+          <td><span class="badge ${badgeClass}">${lead.source}</span></td>
+          <td class="truncate">${lead.query || '-'}</td>
+          <td class="truncate">${lead.title || '-'}</td>
+          <td>${lead.url ? `<a href="${lead.url}" target="_blank" style="color: var(--primary);">🔗 Open</a>` : '-'}</td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+    
+    // Update stats
+    function updateStats(leads) {
+      document.getElementById('totalExtracted').textContent = leads.length;
+      const withEmail = leads.filter(l => l.email).length;
+      document.getElementById('uniqueEmails').textContent = withEmail;
+    }
+    
+    // Copy emails
+    function copyEmails() {
+      const emails = allLeads.filter(l => l.email).map(l => l.email).join('\n');
+      if (!emails) {
+        alert('No emails to copy');
+        return;
+      }
+      navigator.clipboard.writeText(emails);
+      alert(`Copied ${emails.split('\n').length} emails to clipboard!`);
+    }
+    
+    // Export to Excel
+    function exportExcel() {
+      if (allLeads.length === 0) {
+        alert('No leads to export');
+        return;
+      }
+      window.location.href = '/api/export';
+    }
+    
+    // Reset form
+    function resetForm() {
+      document.getElementById('keywords').value = 'book publishing\nweb development';
+      document.querySelectorAll('input[name="platform"]').forEach((el, i) => {
+        el.checked = i < 2;
+        el.closest('.platform-item').classList.toggle('selected', i < 2);
+      });
+      document.getElementById('region').value = 'us';
+      document.getElementById('timeframe').value = 'd';
+      document.getElementById('maxResults').value = '20';
+    }
+    
+    // Initialize
+    checkStatus();
+  </script>
+</body>
+</html>
