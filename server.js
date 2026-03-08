@@ -1,47 +1,74 @@
 /**
  * Lead Extractor - Web Server
+ * Using direct API calls for Vercel compatibility
  */
 
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const { ApifyClient } = require('apify-client');
 const XLSX = require('xlsx');
-const fs = require('fs');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-const apifyClient = new ApifyClient({ token: process.env.APIFY_API_TOKEN });
+const APIFY_TOKEN = process.env.APIFY_API_TOKEN;
 
-// Store for leads and seen emails (in-memory for serverless)
+// Store for leads (in-memory for serverless)
 let allLeads = [];
 let seenEmails = new Set();
 
-// In-memory deduplication (resets on cold start)
-// For persistent dedup, add Supabase integration later
-function loadSeenLeads() {
-  console.log('Using in-memory deduplication (serverless mode)');
+// Helper: Call Apify API directly
+async function callApifyActor(actorId, input) {
+  const response = await fetch(`https://api.apify.com/v2/acts/${actorId}/runs?token=${APIFY_TOKEN}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input)
+  });
+  
+  const run = await response.json();
+  if (!run.data?.id) throw new Error('Failed to start actor');
+  
+  // Wait for completion
+  let status = 'RUNNING';
+  let attempts = 0;
+  while (status === 'RUNNING' && attempts < 60) {
+    await new Promise(r => setTimeout(r, 2000));
+    const statusRes = await fetch(`https://api.apify.com/v2/actor-runs/${run.data.id}?token=${APIFY_TOKEN}`);
+    const statusData = await statusRes.json();
+    status = statusData.data?.status;
+    attempts++;
+  }
+  
+  if (status !== 'SUCCEEDED') throw new Error(`Actor failed: ${status}`);
+  
+  // Get results
+  const datasetId = run.data.defaultDatasetId;
+  const resultsRes = await fetch(`https://api.apify.com/v2/datasets/${datasetId}/items?token=${APIFY_TOKEN}`);
+  return await resultsRes.json();
 }
-
-function saveSeenLeads() {
-  console.log(`Tracking ${seenEmails.size} emails in session`);
-}
-
-loadSeenLeads();
 
 // API: Get status
 app.get('/api/status', async (req, res) => {
   try {
-    const user = await apifyClient.user().get();
-    res.json({ 
-      connected: true, 
-      user: user.username,
-      plan: user.plan?.id || 'FREE'
-    });
+    if (!APIFY_TOKEN) {
+      return res.json({ connected: false, error: 'No API token' });
+    }
+    
+    const response = await fetch(`https://api.apify.com/v2/users/me?token=${APIFY_TOKEN}`);
+    const data = await response.json();
+    
+    if (data.data) {
+      res.json({ 
+        connected: true, 
+        user: data.data.username,
+        plan: data.data.plan?.id || 'FREE'
+      });
+    } else {
+      res.json({ connected: false, error: 'Invalid token' });
+    }
   } catch (err) {
     res.json({ connected: false, error: err.message });
   }
@@ -50,9 +77,6 @@ app.get('/api/status', async (req, res) => {
 // API: Run extraction
 app.post('/api/extract', async (req, res) => {
   const { keywords, platforms, maxResults = 20, region = 'us', timeframe = 'd' } = req.body;
-  
-  // Timeframe mapping for Google
-  const timeMap = { 'd': 'qdr:d', 'w': 'qdr:w', 'm': 'qdr:m', 'all': '' };
   
   console.log('Starting extraction:', { keywords, platforms, maxResults });
   
@@ -63,69 +87,37 @@ app.post('/api/extract', async (req, res) => {
       // Google Search
       if (platforms.includes('google')) {
         console.log(`Searching Google for: ${keyword}`);
-        const run = await apifyClient.actor('apify/google-search-scraper').call({
-          queries: keyword,
-          maxPagesPerQuery: 1,
-          resultsPerPage: Math.min(maxResults, 100),
-          countryCode: region === 'all' ? 'us' : region,
-          languageCode: 'en',
-          ...(timeMap[timeframe] && { customDataFunction: `return { tbs: '${timeMap[timeframe]}' };` })
-        }, { waitSecs: 120 });
-        
-      // Upwork via Google
-      if (platforms.includes('upwork')) {
-        console.log(`Searching Upwork via Google for: ${keyword}`);
-        const upworkRun = await apifyClient.actor('apify/google-search-scraper').call({
-          queries: `site:upwork.com "${keyword}"`,
-          maxPagesPerQuery: 1,
-          resultsPerPage: Math.min(maxResults, 50),
-          countryCode: region === 'all' ? 'us' : region,
-          languageCode: 'en'
-        }, { waitSecs: 120 });
-        
-        const { items: upworkItems } = await apifyClient.dataset(upworkRun.defaultDatasetId).listItems();
-        if (upworkItems[0]?.organicResults) {
-          for (const result of upworkItems[0].organicResults) {
-            const lead = {
-              name: extractName(result.title),
-              email: extractEmail(result.description || ''),
-              phone: '',
-              source: 'Upwork',
-              query: keyword,
-              title: result.title,
-              url: result.url,
-              snippet: result.description || '',
-              extractedAt: new Date().toISOString()
-            };
-            if (!lead.email || !seenEmails.has(lead.email.toLowerCase())) {
-              if (lead.email) seenEmails.add(lead.email.toLowerCase());
-              results.push(lead);
+        try {
+          const items = await callApifyActor('apify~google-search-scraper', {
+            queries: keyword,
+            maxPagesPerQuery: 1,
+            resultsPerPage: Math.min(maxResults, 50),
+            countryCode: region === 'all' ? 'us' : region,
+            languageCode: 'en'
+          });
+          
+          if (items[0]?.organicResults) {
+            for (const result of items[0].organicResults) {
+              const lead = {
+                name: extractName(result.title),
+                email: extractEmail(result.description || ''),
+                phone: '',
+                source: 'Google',
+                query: keyword,
+                title: result.title,
+                url: result.url,
+                snippet: result.description || '',
+                extractedAt: new Date().toISOString()
+              };
+              
+              if (!lead.email || !seenEmails.has(lead.email.toLowerCase())) {
+                if (lead.email) seenEmails.add(lead.email.toLowerCase());
+                results.push(lead);
+              }
             }
           }
-        }
-      }
-
-        const { items } = await apifyClient.dataset(run.defaultDatasetId).listItems();
-        
-        if (items[0]?.organicResults) {
-          for (const result of items[0].organicResults) {
-            const lead = {
-              name: extractName(result.title),
-              email: extractEmail(result.description || ''),
-              phone: '',
-              source: 'Google',
-              query: keyword,
-              title: result.title,
-              url: result.url,
-              snippet: result.description || '',
-              extractedAt: new Date().toISOString()
-            };
-            
-            if (!lead.email || !seenEmails.has(lead.email.toLowerCase())) {
-              if (lead.email) seenEmails.add(lead.email.toLowerCase());
-              results.push(lead);
-            }
-          }
+        } catch (err) {
+          console.log('Google error:', err.message);
         }
       }
 
@@ -133,15 +125,13 @@ app.post('/api/extract', async (req, res) => {
       if (platforms.includes('reddit')) {
         console.log(`Searching Reddit for: ${keyword}`);
         try {
-          const run = await apifyClient.actor('trudax/reddit-scraper').call({
+          const items = await callApifyActor('trudax~reddit-scraper', {
             searches: [keyword],
-            maxPostsPerSearch: Math.min(maxResults, 50),
+            maxPostsPerSearch: Math.min(maxResults, 30),
             searchPosts: true,
             searchComments: false,
             sort: 'new'
-          }, { waitSecs: 120 });
-
-          const { items } = await apifyClient.dataset(run.defaultDatasetId).listItems();
+          });
           
           for (const post of items) {
             const lead = {
@@ -167,111 +157,43 @@ app.post('/api/extract', async (req, res) => {
         }
       }
 
-      // Facebook
-      if (platforms.includes('facebook')) {
-        console.log(`Searching Facebook for: ${keyword}`);
+      // Upwork via Google
+      if (platforms.includes('upwork')) {
+        console.log(`Searching Upwork via Google for: ${keyword}`);
         try {
-          const run = await apifyClient.actor('apify/facebook-posts-scraper').call({
-            searchQueries: [keyword],
-            maxPosts: Math.min(maxResults, 50)
-          }, { waitSecs: 180 });
-
-          const { items } = await apifyClient.dataset(run.defaultDatasetId).listItems();
+          const items = await callApifyActor('apify~google-search-scraper', {
+            queries: `site:upwork.com "${keyword}"`,
+            maxPagesPerQuery: 1,
+            resultsPerPage: Math.min(maxResults, 30),
+            countryCode: region === 'all' ? 'us' : region,
+            languageCode: 'en'
+          });
           
-          for (const post of items) {
-            const lead = {
-              name: post.authorName || 'Unknown',
-              email: extractEmail(post.text || ''),
-              phone: extractPhone(post.text || ''),
-              source: 'Facebook',
-              query: keyword,
-              title: (post.text || '').substring(0, 100),
-              url: post.url,
-              snippet: (post.text || '').substring(0, 300),
-              extractedAt: new Date().toISOString()
-            };
-            
-            if (!lead.email || !seenEmails.has(lead.email.toLowerCase())) {
-              if (lead.email) seenEmails.add(lead.email.toLowerCase());
-              results.push(lead);
+          if (items[0]?.organicResults) {
+            for (const result of items[0].organicResults) {
+              const lead = {
+                name: extractName(result.title),
+                email: extractEmail(result.description || ''),
+                phone: '',
+                source: 'Upwork',
+                query: keyword,
+                title: result.title,
+                url: result.url,
+                snippet: result.description || '',
+                extractedAt: new Date().toISOString()
+              };
+              if (!lead.email || !seenEmails.has(lead.email.toLowerCase())) {
+                if (lead.email) seenEmails.add(lead.email.toLowerCase());
+                results.push(lead);
+              }
             }
           }
         } catch (err) {
-          console.log('Facebook error:', err.message);
-        }
-      }
-
-      // Instagram
-      if (platforms.includes('instagram')) {
-        console.log(`Searching Instagram for: ${keyword}`);
-        try {
-          const run = await apifyClient.actor('apify/instagram-scraper').call({
-            search: keyword,
-            resultsLimit: Math.min(maxResults, 50)
-          }, { waitSecs: 180 });
-
-          const { items } = await apifyClient.dataset(run.defaultDatasetId).listItems();
-          
-          for (const post of items) {
-            const lead = {
-              name: post.ownerUsername || 'Unknown',
-              email: extractEmail(post.caption || ''),
-              phone: '',
-              source: 'Instagram',
-              query: keyword,
-              title: (post.caption || '').substring(0, 100),
-              url: post.url,
-              snippet: (post.caption || '').substring(0, 300),
-              extractedAt: new Date().toISOString()
-            };
-            
-            if (!lead.email || !seenEmails.has(lead.email.toLowerCase())) {
-              if (lead.email) seenEmails.add(lead.email.toLowerCase());
-              results.push(lead);
-            }
-          }
-        } catch (err) {
-          console.log('Instagram error:', err.message);
-        }
-      }
-
-      // Twitter
-      if (platforms.includes('twitter')) {
-        console.log(`Searching Twitter for: ${keyword}`);
-        try {
-          const run = await apifyClient.actor('apidojo/tweet-scraper').call({
-            searchTerms: [keyword],
-            maxTweets: Math.min(maxResults, 50),
-            sort: 'Latest'
-          }, { waitSecs: 180 });
-
-          const { items } = await apifyClient.dataset(run.defaultDatasetId).listItems();
-          
-          for (const tweet of items) {
-            const lead = {
-              name: tweet.author?.name || tweet.user?.name || 'Unknown',
-              email: extractEmail(tweet.text || ''),
-              phone: '',
-              source: 'Twitter',
-              query: keyword,
-              title: (tweet.text || '').substring(0, 100),
-              url: tweet.url,
-              snippet: tweet.text || '',
-              extractedAt: new Date().toISOString()
-            };
-            
-            if (!lead.email || !seenEmails.has(lead.email.toLowerCase())) {
-              if (lead.email) seenEmails.add(lead.email.toLowerCase());
-              results.push(lead);
-            }
-          }
-        } catch (err) {
-          console.log('Twitter error:', err.message);
+          console.log('Upwork error:', err.message);
         }
       }
     }
 
-    saveSeenLeads();
     allLeads = results;
     
     res.json({ 
