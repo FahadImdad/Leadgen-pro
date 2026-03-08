@@ -17,31 +17,18 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const apifyClient = new ApifyClient({ token: process.env.APIFY_API_TOKEN });
 
-// Store for leads and seen emails
+// Store for leads and seen emails (in-memory for serverless)
 let allLeads = [];
 let seenEmails = new Set();
-const dataPath = path.join(__dirname, 'data/seen_leads.json');
 
-// Load seen leads
+// In-memory deduplication (resets on cold start)
+// For persistent dedup, add Supabase integration later
 function loadSeenLeads() {
-  try {
-    if (fs.existsSync(dataPath)) {
-      const data = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
-      seenEmails = new Set(data.emails || []);
-    }
-  } catch (err) {
-    console.log('Starting fresh database');
-  }
+  console.log('Using in-memory deduplication (serverless mode)');
 }
 
-// Save seen leads
 function saveSeenLeads() {
-  const dir = path.dirname(dataPath);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(dataPath, JSON.stringify({ 
-    emails: Array.from(seenEmails),
-    lastUpdated: new Date().toISOString()
-  }, null, 2));
+  console.log(`Tracking ${seenEmails.size} emails in session`);
 }
 
 loadSeenLeads();
