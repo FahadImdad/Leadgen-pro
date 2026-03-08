@@ -252,45 +252,50 @@ app.post('/api/extract', async (req, res) => {
       }
     }
 
-    // Enrich leads with Hunter.io (only for leads without email)
-    const enrichedResults = [];
+    // Enrich leads with Hunter.io (try to find/verify emails)
     let hunterCreditsUsed = 0;
     const MAX_HUNTER_CALLS = 2; // Limit to save credits (free tier safe)
     
     for (const lead of results) {
+      lead.emailVerified = false;
+      
       // If already has email, verify it
-      if (lead.email) {
+      if (lead.email && hunterCreditsUsed < MAX_HUNTER_CALLS) {
         const verified = await verifyEmailWithHunter(lead.email);
-        if (verified?.verified) {
-          lead.emailVerified = true;
-          enrichedResults.push(lead);
+        if (verified) {
+          lead.emailVerified = verified.verified;
+          lead.emailScore = verified.score;
         }
         hunterCreditsUsed++;
       } 
       // If no email but has URL, try to find email
-      else if (lead.url && hunterCreditsUsed < MAX_HUNTER_CALLS) {
+      else if (!lead.email && lead.url && hunterCreditsUsed < MAX_HUNTER_CALLS) {
         const domain = extractDomain(lead.url);
-        if (domain && !domain.includes('google.') && !domain.includes('reddit.')) {
+        if (domain && !domain.includes('google.') && !domain.includes('reddit.') && !domain.includes('upwork.')) {
           const found = await findEmailWithHunter(domain, null, null);
           if (found?.email) {
             lead.email = found.email;
             lead.emailVerified = found.verified;
             lead.emailConfidence = found.confidence;
-            enrichedResults.push(lead);
           }
           hunterCreditsUsed++;
         }
       }
     }
     
-    // Only return leads with emails
-    const leadsWithEmail = enrichedResults.filter(l => l.email);
-    allLeads = leadsWithEmail;
+    // Return ALL leads, not just ones with emails
+    allLeads = results;
+    
+    // Count stats
+    const withEmail = results.filter(l => l.email).length;
+    const verified = results.filter(l => l.emailVerified).length;
     
     res.json({ 
       success: true, 
-      count: leadsWithEmail.length,
-      leads: leadsWithEmail,
+      count: results.length,
+      withEmail: withEmail,
+      verified: verified,
+      leads: results,
       hunterCreditsUsed: hunterCreditsUsed
     });
   } catch (err) {
