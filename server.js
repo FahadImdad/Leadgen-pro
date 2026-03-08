@@ -351,6 +351,13 @@ app.get('/', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`🚀 Lead Extractor running at http://localhost:${PORT}`);
-});
+
+// For local development
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(`🚀 Lead Extractor running at http://localhost:${PORT}`);
+  });
+}
+
+// Export for Vercel
+module.exports = app;
