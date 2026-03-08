@@ -255,7 +255,7 @@ app.post('/api/extract', async (req, res) => {
     // Enrich leads with Hunter.io (only for leads without email)
     const enrichedResults = [];
     let hunterCreditsUsed = 0;
-    const MAX_HUNTER_CALLS = 5; // Limit to save credits
+    const MAX_HUNTER_CALLS = 2; // Limit to save credits (free tier safe)
     
     for (const lead of results) {
       // If already has email, verify it
