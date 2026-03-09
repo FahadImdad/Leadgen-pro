@@ -143,20 +143,59 @@ async function scrapePageForContacts(url) {
     
     // Extract emails from page
     const emailMatches = html.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
-    // Filter out common non-lead emails
-    const emails = emailMatches.filter(e => 
-      !e.includes('example.com') && 
-      !e.includes('email.com') &&
-      !e.includes('domain.com') &&
-      !e.includes('reddit.com') &&
-      !e.includes('privacy') &&
-      !e.includes('support@') &&
-      !e.includes('noreply') &&
-      !e.includes('info@')
-    );
+    // Filter out common non-lead/fake emails
+    const emails = emailMatches.filter(e => {
+      const lower = e.toLowerCase();
+      // Exclude generic/system emails
+      if (lower.includes('example.com')) return false;
+      if (lower.includes('email.com')) return false;
+      if (lower.includes('domain.com')) return false;
+      if (lower.includes('reddit.com')) return false;
+      if (lower.includes('privacy')) return false;
+      if (lower.startsWith('support@')) return false;
+      if (lower.startsWith('noreply')) return false;
+      if (lower.startsWith('info@')) return false;
+      if (lower.startsWith('admin@')) return false;
+      if (lower.startsWith('contact@')) return false;
+      if (lower.startsWith('help@')) return false;
+      if (lower.startsWith('sales@')) return false;
+      if (lower.startsWith('marketing@')) return false;
+      if (lower.startsWith('webmaster@')) return false;
+      // Exclude scam domains (from writerbeware list)
+      if (lower.includes('amazonstudio.me')) return false;
+      if (lower.includes('ballantinebooks.co')) return false;
+      if (lower.includes('barnesandnoble.agency')) return false;
+      if (lower.includes('book-agents.net')) return false;
+      // Only keep personal-looking emails (gmail, yahoo, outlook, or personal domains)
+      const isPersonal = lower.includes('@gmail.') || 
+                         lower.includes('@yahoo.') || 
+                         lower.includes('@hotmail.') ||
+                         lower.includes('@outlook.') ||
+                         lower.includes('@icloud.') ||
+                         lower.includes('@aol.');
+      // For non-personal, check it's not a generic role
+      if (!isPersonal && !lower.match(/^[a-z]+\.[a-z]+@/)) {
+        // Allow if it looks like firstname@ or name@
+        if (lower.match(/^(admin|info|contact|support|help|sales|marketing|press|media|legal|hr|jobs|careers)@/)) {
+          return false;
+        }
+      }
+      return true;
+    });
     
-    // Extract phones (various formats)
+    // Extract phones (various formats) - must be 10+ digits
     const phoneMatches = html.match(/(?:\+?1[-.\s]?)?\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}/g) || [];
+    // Filter out fake/example numbers
+    const validPhones = phoneMatches.filter(p => {
+      const digits = p.replace(/\D/g, '');
+      // Exclude obvious fake patterns
+      if (digits.startsWith('123456')) return false;
+      if (digits.startsWith('000')) return false;
+      if (digits.startsWith('555')) return false; // US fake prefix
+      if (digits === '1234567890') return false;
+      if (digits.length < 10) return false;
+      return true;
+    });
     
     // Try to extract Reddit username from URL or page
     let authorName = '';
@@ -167,7 +206,7 @@ async function scrapePageForContacts(url) {
     
     return {
       email: emails[0] || '',
-      phone: phoneMatches[0] || '',
+      phone: validPhones[0] || '',
       authorName: authorName
     };
   } catch (err) {
