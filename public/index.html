@@ -525,7 +525,11 @@
         </div>
         <div class="stat-card" style="border-color: var(--success);">
           <div class="stat-value" id="foundCount" style="color: var(--success);">0</div>
-          <div class="stat-label">Found ✅</div>
+          <div class="stat-label">Emails ✅</div>
+        </div>
+        <div class="stat-card" style="border-color: var(--warning);">
+          <div class="stat-value" id="dmCount" style="color: var(--warning);">0</div>
+          <div class="stat-label">DM Required 💬</div>
         </div>
         <div class="stat-card" style="border-color: var(--danger);">
           <div class="stat-value" id="notAvailableCount" style="color: var(--danger);">0</div>
@@ -793,10 +797,13 @@ web development</textarea>
       
       leads.forEach(lead => {
         const badgeClass = `badge-${(lead.source || '').toLowerCase()}`;
+        const isDmLead = lead.contactMethod === 'dm' || (lead.email && lead.email.startsWith('(DM'));
         const row = document.createElement('tr');
         row.innerHTML = `
           <td>${lead.name || '-'}</td>
-          <td style="color: ${lead.email ? 'var(--success)' : 'var(--text-muted)'}; font-weight: ${lead.email ? '500' : '400'};">${lead.email || '-'}</td>
+          <td style="color: ${isDmLead ? 'var(--warning)' : (lead.email ? 'var(--success)' : 'var(--text-muted)')}; font-weight: ${lead.email ? '500' : '400'};">
+            ${isDmLead ? '💬 ' : ''}${lead.email || '-'}
+          </td>
           <td>${lead.phone || '-'}</td>
           <td><span class="badge ${badgeClass}">${lead.source}</span></td>
           <td class="truncate">${lead.query || '-'}</td>
@@ -811,14 +818,18 @@ web development</textarea>
     function updateStats(data) {
       document.getElementById('requestedCount').textContent = data.requested || 0;
       document.getElementById('foundCount').textContent = data.found || 0;
+      document.getElementById('dmCount').textContent = data.dmLeads || 0;
       document.getElementById('notAvailableCount').textContent = data.notAvailable || 0;
     }
     
-    // Copy emails
+    // Copy emails (only real emails, not DM leads)
     function copyEmails() {
-      const emails = allLeads.filter(l => l.email).map(l => l.email).join('\n');
+      const emails = allLeads
+        .filter(l => l.email && !l.email.startsWith('(DM') && !l.email.startsWith('(contact'))
+        .map(l => l.email)
+        .join('\n');
       if (!emails) {
-        alert('No emails to copy');
+        alert('No emails to copy (only DM leads found - contact them directly on the platform)');
         return;
       }
       navigator.clipboard.writeText(emails);

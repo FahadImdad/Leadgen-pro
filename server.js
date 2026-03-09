@@ -271,6 +271,18 @@ async function scrapePageForContacts(url) {
       .replace(/\s+/g, ' ')
       .trim();
     
+    // Detect "DM me" patterns - valid leads that need manual outreach
+    const dmPatterns = /\b(dm\s*me|message\s*me|pm\s*me|send\s*me\s*a\s*(dm|pm|message)|reach\s*out\s*via\s*(dm|pm|message)|contact\s*via\s*(dm|pm))\b/i;
+    const hasDmRequest = dmPatterns.test(plainText);
+    
+    // Detect platform from URL
+    let platform = 'platform';
+    if (url.includes('reddit.com')) platform = 'Reddit';
+    else if (url.includes('linkedin.com')) platform = 'LinkedIn';
+    else if (url.includes('twitter.com') || url.includes('x.com')) platform = 'Twitter/X';
+    else if (url.includes('facebook.com')) platform = 'Facebook';
+    else if (url.includes('instagram.com')) platform = 'Instagram';
+    
     // Use Gemini for smart extraction if available
     if (GEMINI_API_KEY) {
       const geminiResult = await extractWithGemini(plainText, url);
@@ -281,6 +293,16 @@ async function scrapePageForContacts(url) {
           authorName: geminiResult.full_name || '',
           intent: geminiResult.intent || '',
           isLead: true
+        };
+      } else if (geminiResult && geminiResult.is_lead && hasDmRequest) {
+        // Valid lead but says "DM me" instead of email
+        return {
+          email: `(DM on ${platform})`,
+          phone: geminiResult.phone || '',
+          authorName: geminiResult.full_name || '',
+          intent: geminiResult.intent || '',
+          isLead: true,
+          contactMethod: 'dm'
         };
       } else if (geminiResult && !geminiResult.is_lead) {
         // Not a lead (company offering services)
@@ -472,9 +494,12 @@ app.post('/api/extract', async (req, res) => {
               console.log('Scraping:', result.url);
               const contacts = await scrapePageForContacts(result.url);
               
-              // Only add if it's a real lead (person seeking services) with personal email
-              if (contacts.isLead !== false && contacts.email && !seenEmails.has(contacts.email.toLowerCase()) && !isCompanyEmail(contacts.email) && !isCompanyEmail(contacts.email)) {
-                seenEmails.add(contacts.email.toLowerCase());
+              // Only add if it's a real lead (person seeking services) with contact method
+              const isDmLead = contacts.contactMethod === 'dm';
+              const dedupeKey = isDmLead ? result.url.toLowerCase() : contacts.email.toLowerCase();
+              
+              if (contacts.isLead !== false && contacts.email && !seenEmails.has(dedupeKey) && (isDmLead || !isCompanyEmail(contacts.email))) {
+                seenEmails.add(dedupeKey);
                 results.push({
                   name: contacts.authorName || extractName(result.title),
                   email: contacts.email,
@@ -485,7 +510,8 @@ app.post('/api/extract', async (req, res) => {
                   title: result.title,
                   url: result.url,
                   snippet: result.description || '',
-                  extractedAt: new Date().toISOString()
+                  extractedAt: new Date().toISOString(),
+                  contactMethod: contacts.contactMethod || 'email'
                 });
                 
                 // Stop if we have enough leads with emails
@@ -518,8 +544,11 @@ app.post('/api/extract', async (req, res) => {
               console.log('Scraping Reddit:', result.url);
               const contacts = await scrapePageForContacts(result.url);
               
-              if (contacts.isLead !== false && contacts.email && !seenEmails.has(contacts.email.toLowerCase()) && !isCompanyEmail(contacts.email)) {
-                seenEmails.add(contacts.email.toLowerCase());
+              const isDmLead = contacts.contactMethod === 'dm';
+              const dedupeKey = isDmLead ? result.url.toLowerCase() : contacts.email.toLowerCase();
+              
+              if (contacts.isLead !== false && contacts.email && !seenEmails.has(dedupeKey) && (isDmLead || !isCompanyEmail(contacts.email))) {
+                seenEmails.add(dedupeKey);
                 results.push({
                   name: contacts.authorName || 'Reddit User',
                   email: contacts.email,
@@ -530,7 +559,8 @@ app.post('/api/extract', async (req, res) => {
                   title: result.title,
                   url: result.url,
                   snippet: result.description || '',
-                  extractedAt: new Date().toISOString()
+                  extractedAt: new Date().toISOString(),
+                  contactMethod: contacts.contactMethod || 'email'
                 });
                 
                 if (results.length >= maxResults) break;
@@ -597,8 +627,11 @@ app.post('/api/extract', async (req, res) => {
               console.log('Scraping LinkedIn:', result.url);
               const contacts = await scrapePageForContacts(result.url);
               
-              if (contacts.isLead !== false && contacts.email && !seenEmails.has(contacts.email.toLowerCase()) && !isCompanyEmail(contacts.email)) {
-                seenEmails.add(contacts.email.toLowerCase());
+              const isDmLead = contacts.contactMethod === 'dm';
+              const dedupeKey = isDmLead ? result.url.toLowerCase() : contacts.email.toLowerCase();
+              
+              if (contacts.isLead !== false && contacts.email && !seenEmails.has(dedupeKey) && (isDmLead || !isCompanyEmail(contacts.email))) {
+                seenEmails.add(dedupeKey);
                 results.push({
                   name: contacts.authorName || extractName(result.title),
                   email: contacts.email,
@@ -609,7 +642,8 @@ app.post('/api/extract', async (req, res) => {
                   title: result.title,
                   url: result.url,
                   snippet: result.description || '',
-                  extractedAt: new Date().toISOString()
+                  extractedAt: new Date().toISOString(),
+                  contactMethod: contacts.contactMethod || 'email'
                 });
                 if (results.length >= maxResults) break;
               }
@@ -639,8 +673,11 @@ app.post('/api/extract', async (req, res) => {
               console.log('Scraping Facebook:', result.url);
               const contacts = await scrapePageForContacts(result.url);
               
-              if (contacts.isLead !== false && contacts.email && !seenEmails.has(contacts.email.toLowerCase()) && !isCompanyEmail(contacts.email)) {
-                seenEmails.add(contacts.email.toLowerCase());
+              const isDmLead = contacts.contactMethod === 'dm';
+              const dedupeKey = isDmLead ? result.url.toLowerCase() : contacts.email.toLowerCase();
+              
+              if (contacts.isLead !== false && contacts.email && !seenEmails.has(dedupeKey) && (isDmLead || !isCompanyEmail(contacts.email))) {
+                seenEmails.add(dedupeKey);
                 results.push({
                   name: contacts.authorName || extractName(result.title),
                   email: contacts.email,
@@ -651,7 +688,8 @@ app.post('/api/extract', async (req, res) => {
                   title: result.title,
                   url: result.url,
                   snippet: result.description || '',
-                  extractedAt: new Date().toISOString()
+                  extractedAt: new Date().toISOString(),
+                  contactMethod: contacts.contactMethod || 'email'
                 });
                 if (results.length >= maxResults) break;
               }
@@ -681,8 +719,11 @@ app.post('/api/extract', async (req, res) => {
               console.log('Scraping Instagram:', result.url);
               const contacts = await scrapePageForContacts(result.url);
               
-              if (contacts.isLead !== false && contacts.email && !seenEmails.has(contacts.email.toLowerCase()) && !isCompanyEmail(contacts.email)) {
-                seenEmails.add(contacts.email.toLowerCase());
+              const isDmLead = contacts.contactMethod === 'dm';
+              const dedupeKey = isDmLead ? result.url.toLowerCase() : contacts.email.toLowerCase();
+              
+              if (contacts.isLead !== false && contacts.email && !seenEmails.has(dedupeKey) && (isDmLead || !isCompanyEmail(contacts.email))) {
+                seenEmails.add(dedupeKey);
                 results.push({
                   name: contacts.authorName || extractName(result.title),
                   email: contacts.email,
@@ -693,7 +734,8 @@ app.post('/api/extract', async (req, res) => {
                   title: result.title,
                   url: result.url,
                   snippet: result.description || '',
-                  extractedAt: new Date().toISOString()
+                  extractedAt: new Date().toISOString(),
+                  contactMethod: contacts.contactMethod || 'email'
                 });
                 if (results.length >= maxResults) break;
               }
@@ -723,8 +765,11 @@ app.post('/api/extract', async (req, res) => {
               console.log('Scraping Twitter:', result.url);
               const contacts = await scrapePageForContacts(result.url);
               
-              if (contacts.isLead !== false && contacts.email && !seenEmails.has(contacts.email.toLowerCase()) && !isCompanyEmail(contacts.email)) {
-                seenEmails.add(contacts.email.toLowerCase());
+              const isDmLead = contacts.contactMethod === 'dm';
+              const dedupeKey = isDmLead ? result.url.toLowerCase() : contacts.email.toLowerCase();
+              
+              if (contacts.isLead !== false && contacts.email && !seenEmails.has(dedupeKey) && (isDmLead || !isCompanyEmail(contacts.email))) {
+                seenEmails.add(dedupeKey);
                 results.push({
                   name: contacts.authorName || extractName(result.title),
                   email: contacts.email,
@@ -735,7 +780,8 @@ app.post('/api/extract', async (req, res) => {
                   title: result.title,
                   url: result.url,
                   snippet: result.description || '',
-                  extractedAt: new Date().toISOString()
+                  extractedAt: new Date().toISOString(),
+                  contactMethod: contacts.contactMethod || 'email'
                 });
                 if (results.length >= maxResults) break;
               }
@@ -782,28 +828,37 @@ app.post('/api/extract', async (req, res) => {
       }
     }
     
-    // ONLY return leads with real emails (filter out placeholders)
+    // Separate leads with emails and DM leads
     const leadsWithEmail = results.filter(l => 
       l.email && 
       l.email.includes('@') && 
       !l.email.includes('(contact via')
     );
     
-    allLeads = leadsWithEmail;
+    const dmLeads = results.filter(l => 
+      l.email && 
+      (l.email.startsWith('(DM') || l.contactMethod === 'dm')
+    );
+    
+    // Include both email leads and DM leads
+    const allValidLeads = [...leadsWithEmail, ...dmLeads];
+    allLeads = allValidLeads;
     
     // Count stats
     const verified = leadsWithEmail.filter(l => l.emailVerified).length;
+    const totalRequested = maxResults * platforms.length * keywords.length;
     
     res.json({ 
       success: true, 
-      requested: maxResults * platforms.length * keywords.length,
+      requested: totalRequested,
       found: leadsWithEmail.length,
-      notAvailable: Math.max(0, (maxResults * platforms.length * keywords.length) - leadsWithEmail.length),
+      dmLeads: dmLeads.length,
+      notAvailable: Math.max(0, totalRequested - leadsWithEmail.length - dmLeads.length),
       totalScraped: results.length,
       verified: verified,
-      leads: leadsWithEmail,
+      leads: allValidLeads,
       hunterCreditsUsed: hunterCreditsUsed,
-      message: leadsWithEmail.length === 0 ? 'No leads with email found. Try different keywords or platforms.' : ''
+      message: allValidLeads.length === 0 ? 'No leads found. Try different keywords or platforms.' : ''
     });
   } catch (err) {
     console.error('Extraction error:', err);
