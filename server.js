@@ -467,6 +467,170 @@ app.post('/api/extract', async (req, res) => {
           console.log('Upwork error:', err.message);
         }
       }
+
+      // LinkedIn via Google
+      if (platforms.includes('linkedin')) {
+        console.log(`Searching LinkedIn via Google for: ${keyword}`);
+        try {
+          const items = await callApifyActor('apify~google-search-scraper', {
+            queries: `site:linkedin.com/posts OR site:linkedin.com/pulse "${keyword}"`,
+            maxPagesPerQuery: 1,
+            resultsPerPage: Math.min(maxResults * 2, 30),
+            countryCode: region === 'all' ? 'us' : region,
+            languageCode: 'en'
+          });
+          
+          if (items[0]?.organicResults) {
+            const limitedResults = items[0].organicResults.slice(0, maxResults * 2);
+            for (const result of limitedResults) {
+              console.log('Scraping LinkedIn:', result.url);
+              const contacts = await scrapePageForContacts(result.url);
+              
+              if (contacts.isLead !== false && contacts.email && !seenEmails.has(contacts.email.toLowerCase())) {
+                seenEmails.add(contacts.email.toLowerCase());
+                results.push({
+                  name: contacts.authorName || extractName(result.title),
+                  email: contacts.email,
+                  phone: contacts.phone || '',
+                  source: 'LinkedIn',
+                  query: keyword,
+                  intent: contacts.intent || '',
+                  title: result.title,
+                  url: result.url,
+                  snippet: result.description || '',
+                  extractedAt: new Date().toISOString()
+                });
+                if (results.length >= maxResults) break;
+              }
+            }
+          }
+        } catch (err) {
+          console.log('LinkedIn error:', err.message);
+        }
+      }
+
+      // Facebook via Google
+      if (platforms.includes('facebook')) {
+        console.log(`Searching Facebook via Google for: ${keyword}`);
+        try {
+          const items = await callApifyActor('apify~google-search-scraper', {
+            queries: `site:facebook.com "${keyword}" looking OR need OR hiring`,
+            maxPagesPerQuery: 1,
+            resultsPerPage: Math.min(maxResults * 2, 30),
+            countryCode: region === 'all' ? 'us' : region,
+            languageCode: 'en'
+          });
+          
+          if (items[0]?.organicResults) {
+            const limitedResults = items[0].organicResults.slice(0, maxResults * 2);
+            for (const result of limitedResults) {
+              console.log('Scraping Facebook:', result.url);
+              const contacts = await scrapePageForContacts(result.url);
+              
+              if (contacts.isLead !== false && contacts.email && !seenEmails.has(contacts.email.toLowerCase())) {
+                seenEmails.add(contacts.email.toLowerCase());
+                results.push({
+                  name: contacts.authorName || extractName(result.title),
+                  email: contacts.email,
+                  phone: contacts.phone || '',
+                  source: 'Facebook',
+                  query: keyword,
+                  intent: contacts.intent || '',
+                  title: result.title,
+                  url: result.url,
+                  snippet: result.description || '',
+                  extractedAt: new Date().toISOString()
+                });
+                if (results.length >= maxResults) break;
+              }
+            }
+          }
+        } catch (err) {
+          console.log('Facebook error:', err.message);
+        }
+      }
+
+      // Instagram via Google
+      if (platforms.includes('instagram')) {
+        console.log(`Searching Instagram via Google for: ${keyword}`);
+        try {
+          const items = await callApifyActor('apify~google-search-scraper', {
+            queries: `site:instagram.com "${keyword}"`,
+            maxPagesPerQuery: 1,
+            resultsPerPage: Math.min(maxResults * 2, 30),
+            countryCode: region === 'all' ? 'us' : region,
+            languageCode: 'en'
+          });
+          
+          if (items[0]?.organicResults) {
+            const limitedResults = items[0].organicResults.slice(0, maxResults * 2);
+            for (const result of limitedResults) {
+              console.log('Scraping Instagram:', result.url);
+              const contacts = await scrapePageForContacts(result.url);
+              
+              if (contacts.isLead !== false && contacts.email && !seenEmails.has(contacts.email.toLowerCase())) {
+                seenEmails.add(contacts.email.toLowerCase());
+                results.push({
+                  name: contacts.authorName || extractName(result.title),
+                  email: contacts.email,
+                  phone: contacts.phone || '',
+                  source: 'Instagram',
+                  query: keyword,
+                  intent: contacts.intent || '',
+                  title: result.title,
+                  url: result.url,
+                  snippet: result.description || '',
+                  extractedAt: new Date().toISOString()
+                });
+                if (results.length >= maxResults) break;
+              }
+            }
+          }
+        } catch (err) {
+          console.log('Instagram error:', err.message);
+        }
+      }
+
+      // Twitter/X via Google
+      if (platforms.includes('twitter')) {
+        console.log(`Searching Twitter via Google for: ${keyword}`);
+        try {
+          const items = await callApifyActor('apify~google-search-scraper', {
+            queries: `site:twitter.com OR site:x.com "${keyword}" looking OR need OR hiring`,
+            maxPagesPerQuery: 1,
+            resultsPerPage: Math.min(maxResults * 2, 30),
+            countryCode: region === 'all' ? 'us' : region,
+            languageCode: 'en'
+          });
+          
+          if (items[0]?.organicResults) {
+            const limitedResults = items[0].organicResults.slice(0, maxResults * 2);
+            for (const result of limitedResults) {
+              console.log('Scraping Twitter:', result.url);
+              const contacts = await scrapePageForContacts(result.url);
+              
+              if (contacts.isLead !== false && contacts.email && !seenEmails.has(contacts.email.toLowerCase())) {
+                seenEmails.add(contacts.email.toLowerCase());
+                results.push({
+                  name: contacts.authorName || extractName(result.title),
+                  email: contacts.email,
+                  phone: contacts.phone || '',
+                  source: 'Twitter',
+                  query: keyword,
+                  intent: contacts.intent || '',
+                  title: result.title,
+                  url: result.url,
+                  snippet: result.description || '',
+                  extractedAt: new Date().toISOString()
+                });
+                if (results.length >= maxResults) break;
+              }
+            }
+          }
+        } catch (err) {
+          console.log('Twitter error:', err.message);
+        }
+      }
     }
 
     // Enrich leads with Hunter.io (try to find/verify emails)
