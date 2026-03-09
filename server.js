@@ -44,9 +44,23 @@ function isCompanyEmail(email) {
     'marketing', 'solutions', 'services', 'enterprise', 'corp', 'inc',
     'llc', 'ltd', 'company', 'business', 'official', 'leads', 'seller',
     'india', 'usa', 'global', 'world', 'international', 'group', 'team',
-    'pro', 'expert', 'consultant', 'firm', 'associates', 'partners'
+    'pro', 'expert', 'consultant', 'firm', 'associates', 'partners',
+    'developer', 'designer', 'freelance', 'portfolio', 'hire'
   ];
   return companyPatterns.some(pattern => lower.includes(pattern));
+}
+
+// Check if URL is a job seeker or service provider page (not a customer)
+function isJobSeekerOrProvider(url, title) {
+  const lower = (url + ' ' + (title || '')).toLowerCase();
+  const badPatterns = [
+    'looking for job', 'looking for work', 'seeking job', 'job search',
+    'hire me', 'available for hire', 'my portfolio', 'my services',
+    '/services/', '/portfolio/', '/hire-me', '/about-me',
+    'web-developers', 'freelancers', 'professionals',
+    'faqs', 'contact-us', 'about-us'
+  ];
+  return badPatterns.some(pattern => lower.includes(pattern));
 }
 
 // Gemini Flash: Extract lead info from page content
@@ -393,13 +407,14 @@ app.post('/api/extract', async (req, res) => {
   const MAX_ATTEMPTS = 5; // Max search attempts per platform
   let attempts = 0;
   
-  // Different query variations to try - focus on CUSTOMERS seeking services, not employers hiring
+  // Different query variations - find CUSTOMERS who want to PAY for services
+  // Avoid: job seekers, service providers, portfolios
   const queryVariations = [
-    (kw) => `("I need ${kw}" OR "I'm looking for ${kw}" OR "can anyone recommend ${kw}") "@gmail.com"`,
-    (kw) => `("help me with ${kw}" OR "need help with ${kw}" OR "looking for ${kw} service") "email"`,
-    (kw) => `("want to hire ${kw}" OR "need ${kw} for my project" OR "seeking ${kw} freelancer") "contact"`,
-    (kw) => `("recommend a ${kw}" OR "find a good ${kw}" OR "who can help with ${kw}") "@gmail.com"`,
-    (kw) => `"${kw}" "my project" OR "my website" OR "my book" OR "my business" "email"`
+    (kw) => `("build my website" OR "create my website" OR "develop my website") "@gmail.com"`,
+    (kw) => `("need someone to build" OR "looking for someone to create" OR "who can make my") "website" OR "app" "@gmail.com"`,
+    (kw) => `("publish my book" OR "help me publish" OR "get my book published") "@gmail.com"`,
+    (kw) => `("need a freelancer" OR "looking for freelancer to" OR "hire freelancer for my") "${kw}" "email"`,
+    (kw) => `site:reddit.com ("need help building" OR "can someone build me" OR "looking to pay someone") "${kw}"`
   ];
   
   try {
@@ -444,6 +459,12 @@ app.post('/api/extract', async (req, res) => {
               // Skip blocked domains (known service providers)
               if (isBlockedDomain(result.url)) {
                 console.log('Skipping blocked domain:', result.url);
+                continue;
+              }
+              
+              // Skip job seekers and service providers
+              if (isJobSeekerOrProvider(result.url, result.title)) {
+                console.log('Skipping job seeker/provider:', result.url);
                 continue;
               }
               
