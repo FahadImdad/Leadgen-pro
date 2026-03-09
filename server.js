@@ -25,12 +25,28 @@ const BLOCKED_DOMAINS = [
   'bookbaby.com', 'ingramspark.com', 'kdp.amazon.com', 'blurb.com',
   'fiverr.com', 'upwork.com', 'freelancer.com', 'guru.com',
   'wix.com', 'squarespace.com', 'wordpress.com', 'godaddy.com',
-  '99designs.com', 'designcrowd.com', 'crowdspring.com'
+  '99designs.com', 'designcrowd.com', 'crowdspring.com',
+  'vistapublishers', 'shaktidigital', 'publishersindia'
 ];
 
 function isBlockedDomain(url) {
   const lower = url.toLowerCase();
   return BLOCKED_DOMAINS.some(domain => lower.includes(domain));
+}
+
+// Check if email looks like a company email (not a personal customer)
+function isCompanyEmail(email) {
+  if (!email) return false;
+  const lower = email.toLowerCase();
+  // Company patterns in email
+  const companyPatterns = [
+    'publisher', 'publishing', 'digital', 'agency', 'studio', 'media',
+    'marketing', 'solutions', 'services', 'enterprise', 'corp', 'inc',
+    'llc', 'ltd', 'company', 'business', 'official', 'leads', 'seller',
+    'india', 'usa', 'global', 'world', 'international', 'group', 'team',
+    'pro', 'expert', 'consultant', 'firm', 'associates', 'partners'
+  ];
+  return companyPatterns.some(pattern => lower.includes(pattern));
 }
 
 // Gemini Flash: Extract lead info from page content
@@ -401,12 +417,24 @@ app.post('/api/extract', async (req, res) => {
         if (platforms.includes('google') && results.length < targetCount) {
           console.log(`Searching Google for: ${keyword}`);
         try {
+          // Map timeframe to Google's tbs parameter
+          const timeframeMap = {
+            'h': 'qdr:h',   // past hour
+            'd': 'qdr:d',   // past 24 hours
+            'w': 'qdr:w',   // past week
+            'm': 'qdr:m',   // past month
+            'y': 'qdr:y',   // past year
+            'all': ''       // all time
+          };
+          const tbsParam = timeframeMap[timeframe] || '';
+          
           const items = await callApifyActor('apify~google-search-scraper', {
-            queries: emailSearchQuery,
+            queries: tbsParam ? `${emailSearchQuery} &tbs=${tbsParam}` : emailSearchQuery,
             maxPagesPerQuery: 1,
-            resultsPerPage: Math.min(maxResults * 3, 50), // Get more to filter
+            resultsPerPage: Math.min(maxResults * 3, 50),
             countryCode: region === 'all' ? 'us' : region,
-            languageCode: 'en'
+            languageCode: 'en',
+            customDataFunction: tbsParam ? `async ({ input, page }) => { await page.goto(page.url() + '&tbs=${tbsParam}'); }` : undefined
           });
           
           if (items[0]?.organicResults) {
@@ -422,8 +450,8 @@ app.post('/api/extract', async (req, res) => {
               console.log('Scraping:', result.url);
               const contacts = await scrapePageForContacts(result.url);
               
-              // Only add if it's a real lead (person seeking services) with email
-              if (contacts.isLead !== false && contacts.email && !seenEmails.has(contacts.email.toLowerCase())) {
+              // Only add if it's a real lead (person seeking services) with personal email
+              if (contacts.isLead !== false && contacts.email && !seenEmails.has(contacts.email.toLowerCase()) && !isCompanyEmail(contacts.email) && !isCompanyEmail(contacts.email)) {
                 seenEmails.add(contacts.email.toLowerCase());
                 results.push({
                   name: contacts.authorName || extractName(result.title),
@@ -468,7 +496,7 @@ app.post('/api/extract', async (req, res) => {
               console.log('Scraping Reddit:', result.url);
               const contacts = await scrapePageForContacts(result.url);
               
-              if (contacts.isLead !== false && contacts.email && !seenEmails.has(contacts.email.toLowerCase())) {
+              if (contacts.isLead !== false && contacts.email && !seenEmails.has(contacts.email.toLowerCase()) && !isCompanyEmail(contacts.email)) {
                 seenEmails.add(contacts.email.toLowerCase());
                 results.push({
                   name: contacts.authorName || 'Reddit User',
@@ -547,7 +575,7 @@ app.post('/api/extract', async (req, res) => {
               console.log('Scraping LinkedIn:', result.url);
               const contacts = await scrapePageForContacts(result.url);
               
-              if (contacts.isLead !== false && contacts.email && !seenEmails.has(contacts.email.toLowerCase())) {
+              if (contacts.isLead !== false && contacts.email && !seenEmails.has(contacts.email.toLowerCase()) && !isCompanyEmail(contacts.email)) {
                 seenEmails.add(contacts.email.toLowerCase());
                 results.push({
                   name: contacts.authorName || extractName(result.title),
@@ -589,7 +617,7 @@ app.post('/api/extract', async (req, res) => {
               console.log('Scraping Facebook:', result.url);
               const contacts = await scrapePageForContacts(result.url);
               
-              if (contacts.isLead !== false && contacts.email && !seenEmails.has(contacts.email.toLowerCase())) {
+              if (contacts.isLead !== false && contacts.email && !seenEmails.has(contacts.email.toLowerCase()) && !isCompanyEmail(contacts.email)) {
                 seenEmails.add(contacts.email.toLowerCase());
                 results.push({
                   name: contacts.authorName || extractName(result.title),
@@ -631,7 +659,7 @@ app.post('/api/extract', async (req, res) => {
               console.log('Scraping Instagram:', result.url);
               const contacts = await scrapePageForContacts(result.url);
               
-              if (contacts.isLead !== false && contacts.email && !seenEmails.has(contacts.email.toLowerCase())) {
+              if (contacts.isLead !== false && contacts.email && !seenEmails.has(contacts.email.toLowerCase()) && !isCompanyEmail(contacts.email)) {
                 seenEmails.add(contacts.email.toLowerCase());
                 results.push({
                   name: contacts.authorName || extractName(result.title),
@@ -673,7 +701,7 @@ app.post('/api/extract', async (req, res) => {
               console.log('Scraping Twitter:', result.url);
               const contacts = await scrapePageForContacts(result.url);
               
-              if (contacts.isLead !== false && contacts.email && !seenEmails.has(contacts.email.toLowerCase())) {
+              if (contacts.isLead !== false && contacts.email && !seenEmails.has(contacts.email.toLowerCase()) && !isCompanyEmail(contacts.email)) {
                 seenEmails.add(contacts.email.toLowerCase());
                 results.push({
                   name: contacts.authorName || extractName(result.title),
