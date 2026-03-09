@@ -18,6 +18,21 @@ const APIFY_TOKEN = process.env.APIFY_API_TOKEN;
 const HUNTER_API_KEY = process.env.HUNTER_API_KEY;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
+// Blocklist of company/service provider domains - skip these entirely
+const BLOCKED_DOMAINS = [
+  'booklocker.com', 'writersweekly.com', 'writerbeware', 'sfwa.org',
+  'penguin.com', 'barnesandnoble.com', 'amazon.com', 'lulu.com',
+  'bookbaby.com', 'ingramspark.com', 'kdp.amazon.com', 'blurb.com',
+  'fiverr.com', 'upwork.com', 'freelancer.com', 'guru.com',
+  'wix.com', 'squarespace.com', 'wordpress.com', 'godaddy.com',
+  '99designs.com', 'designcrowd.com', 'crowdspring.com'
+];
+
+function isBlockedDomain(url) {
+  const lower = url.toLowerCase();
+  return BLOCKED_DOMAINS.some(domain => lower.includes(domain));
+}
+
 // Gemini Flash: Extract lead info from page content
 async function extractWithGemini(pageText, url) {
   if (!GEMINI_API_KEY) return null;
@@ -378,6 +393,12 @@ app.post('/api/extract', async (req, res) => {
           if (items[0]?.organicResults) {
             const limitedResults = items[0].organicResults.slice(0, maxResults * 2);
             for (const result of limitedResults) {
+              // Skip blocked domains (known service providers)
+              if (isBlockedDomain(result.url)) {
+                console.log('Skipping blocked domain:', result.url);
+                continue;
+              }
+              
               // Scrape the page for actual contact info
               console.log('Scraping:', result.url);
               const contacts = await scrapePageForContacts(result.url);
@@ -413,7 +434,7 @@ app.post('/api/extract', async (req, res) => {
         console.log(`Searching Reddit via Google for: ${keyword}`);
         try {
           const items = await callApifyActor('apify~google-search-scraper', {
-            queries: `site:reddit.com "${keyword}" ("@gmail.com" OR "@yahoo.com" OR "email" OR "contact")`,
+            queries: `site:reddit.com ("looking for ${keyword}" OR "need ${keyword}" OR "hiring ${keyword}" OR "recommend ${keyword}")`,
             maxPagesPerQuery: 1,
             resultsPerPage: Math.min(maxResults * 3, 30),
             countryCode: region === 'all' ? 'us' : region,
@@ -423,11 +444,11 @@ app.post('/api/extract', async (req, res) => {
           if (items[0]?.organicResults) {
             const limitedResults = items[0].organicResults.slice(0, maxResults * 2);
             for (const result of limitedResults) {
-              // Scrape the page for actual contact info
+              if (isBlockedDomain(result.url)) continue;
+              
               console.log('Scraping Reddit:', result.url);
               const contacts = await scrapePageForContacts(result.url);
               
-              // Only add if it's a real lead with email
               if (contacts.isLead !== false && contacts.email && !seenEmails.has(contacts.email.toLowerCase())) {
                 seenEmails.add(contacts.email.toLowerCase());
                 results.push({
@@ -493,7 +514,7 @@ app.post('/api/extract', async (req, res) => {
         console.log(`Searching LinkedIn via Google for: ${keyword}`);
         try {
           const items = await callApifyActor('apify~google-search-scraper', {
-            queries: `site:linkedin.com/posts OR site:linkedin.com/pulse "${keyword}"`,
+            queries: `site:linkedin.com ("looking for ${keyword}" OR "need ${keyword}" OR "hiring ${keyword}") "@gmail.com" OR "@yahoo.com"`,
             maxPagesPerQuery: 1,
             resultsPerPage: Math.min(maxResults * 2, 30),
             countryCode: region === 'all' ? 'us' : region,
@@ -503,6 +524,7 @@ app.post('/api/extract', async (req, res) => {
           if (items[0]?.organicResults) {
             const limitedResults = items[0].organicResults.slice(0, maxResults * 2);
             for (const result of limitedResults) {
+              if (isBlockedDomain(result.url)) continue;
               console.log('Scraping LinkedIn:', result.url);
               const contacts = await scrapePageForContacts(result.url);
               
@@ -534,7 +556,7 @@ app.post('/api/extract', async (req, res) => {
         console.log(`Searching Facebook via Google for: ${keyword}`);
         try {
           const items = await callApifyActor('apify~google-search-scraper', {
-            queries: `site:facebook.com "${keyword}" looking OR need OR hiring`,
+            queries: `site:facebook.com ("looking for ${keyword}" OR "need ${keyword}" OR "hiring ${keyword}")`,
             maxPagesPerQuery: 1,
             resultsPerPage: Math.min(maxResults * 2, 30),
             countryCode: region === 'all' ? 'us' : region,
@@ -544,6 +566,7 @@ app.post('/api/extract', async (req, res) => {
           if (items[0]?.organicResults) {
             const limitedResults = items[0].organicResults.slice(0, maxResults * 2);
             for (const result of limitedResults) {
+              if (isBlockedDomain(result.url)) continue;
               console.log('Scraping Facebook:', result.url);
               const contacts = await scrapePageForContacts(result.url);
               
@@ -575,7 +598,7 @@ app.post('/api/extract', async (req, res) => {
         console.log(`Searching Instagram via Google for: ${keyword}`);
         try {
           const items = await callApifyActor('apify~google-search-scraper', {
-            queries: `site:instagram.com "${keyword}"`,
+            queries: `site:instagram.com ("looking for ${keyword}" OR "need ${keyword}" OR "hiring ${keyword}")`,
             maxPagesPerQuery: 1,
             resultsPerPage: Math.min(maxResults * 2, 30),
             countryCode: region === 'all' ? 'us' : region,
@@ -585,6 +608,7 @@ app.post('/api/extract', async (req, res) => {
           if (items[0]?.organicResults) {
             const limitedResults = items[0].organicResults.slice(0, maxResults * 2);
             for (const result of limitedResults) {
+              if (isBlockedDomain(result.url)) continue;
               console.log('Scraping Instagram:', result.url);
               const contacts = await scrapePageForContacts(result.url);
               
@@ -616,7 +640,7 @@ app.post('/api/extract', async (req, res) => {
         console.log(`Searching Twitter via Google for: ${keyword}`);
         try {
           const items = await callApifyActor('apify~google-search-scraper', {
-            queries: `site:twitter.com OR site:x.com "${keyword}" looking OR need OR hiring`,
+            queries: `(site:twitter.com OR site:x.com) ("looking for ${keyword}" OR "need ${keyword}" OR "hiring ${keyword}")`,
             maxPagesPerQuery: 1,
             resultsPerPage: Math.min(maxResults * 2, 30),
             countryCode: region === 'all' ? 'us' : region,
@@ -626,6 +650,7 @@ app.post('/api/extract', async (req, res) => {
           if (items[0]?.organicResults) {
             const limitedResults = items[0].organicResults.slice(0, maxResults * 2);
             for (const result of limitedResults) {
+              if (isBlockedDomain(result.url)) continue;
               console.log('Scraping Twitter:', result.url);
               const contacts = await scrapePageForContacts(result.url);
               
