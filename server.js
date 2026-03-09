@@ -26,25 +26,43 @@ async function extractWithGemini(pageText, url) {
     // Limit text to avoid token limits
     const truncatedText = pageText.substring(0, 8000);
     
-    const prompt = `Analyze this webpage content and extract lead information.
+    const prompt = `You are a lead qualification expert. Analyze this webpage to find CUSTOMERS who need services.
 
-WEBPAGE URL: ${url}
-WEBPAGE CONTENT:
+URL: ${url}
+
+CONTENT:
 ${truncatedText}
 
-TASK: Find if there's a PERSON (not a company) who is SEEKING services (like publishing, web development, design, marketing, etc.)
+CRITICAL RULES:
+- We want CUSTOMERS/CLIENTS who are LOOKING FOR services
+- We DO NOT want companies/businesses that OFFER/SELL services
+- A publishing company = NOT A LEAD (they sell services)
+- An author saying "I need a publisher" = LEAD (they need services)
+- A web agency = NOT A LEAD
+- Someone posting "looking for web developer" = LEAD
 
-If you find a potential lead, extract:
-1. FULL_NAME: The person's actual name (not company name)
-2. EMAIL: Their personal email address (not support@, info@, or company emails)
-3. PHONE: Their phone number (only if it looks like a real personal number)
-4. INTENT: What service are they looking for?
-5. IS_LEAD: true if this is someone SEEKING services, false if this is a company OFFERING services
+DISQUALIFY if:
+- It's a company website offering services
+- Email is company email (info@, contact@, support@, company names)
+- The page is advertising/selling services
+- It's a directory, list, or warning page about companies
 
-Respond ONLY in this exact JSON format (no markdown, no explanation):
-{"full_name": "...", "email": "...", "phone": "...", "intent": "...", "is_lead": true/false}
+QUALIFY only if:
+- Individual person seeking/needing help
+- They posted asking for services
+- Personal email (gmail, yahoo, outlook)
 
-If no valid lead found, respond: {"is_lead": false}`;
+Extract ONLY if this is a real customer seeking services:
+- FULL_NAME: The person's name (not company)
+- EMAIL: Their personal email
+- PHONE: Their personal phone (or empty)
+- INTENT: What service they need
+
+JSON response only:
+{"full_name": "...", "email": "...", "phone": "...", "intent": "...", "is_lead": true}
+
+If NOT a customer seeking services, respond:
+{"is_lead": false}`;
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
@@ -340,8 +358,8 @@ app.post('/api/extract', async (req, res) => {
   
   try {
     for (const keyword of keywords) {
-      // Enhanced search: look for posts with contact info
-      const emailSearchQuery = `"${keyword}" ("@gmail.com" OR "@yahoo.com" OR "@hotmail.com" OR "email me" OR "contact me at")`;
+      // Enhanced search: look for people SEEKING services (not companies offering)
+      const emailSearchQuery = `("looking for ${keyword}" OR "need ${keyword}" OR "searching for ${keyword}" OR "hiring ${keyword}" OR "want ${keyword}") ("@gmail.com" OR "@yahoo.com" OR "email me" OR "contact me")`;
       
       // Google Search (with contact patterns)
       if (platforms.includes('google')) {
