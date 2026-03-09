@@ -183,17 +183,25 @@ async function scrapePageForContacts(url) {
       return true;
     });
     
-    // Extract phones (various formats) - must be 10+ digits
-    const phoneMatches = html.match(/(?:\+?1[-.\s]?)?\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}/g) || [];
-    // Filter out fake/example numbers
+    // Extract phones - look for properly formatted phone numbers only
+    // Match patterns like: (510) 800-6622, 510-800-6622, +1 510 800 6622
+    const phoneMatches = html.match(/(?:\+?1[-.\s]?)?\(?[2-9][0-9]{2}\)?[-.\s]?[2-9][0-9]{2}[-.\s]?[0-9]{4}/g) || [];
+    // Filter out fake/example numbers and year-like patterns
     const validPhones = phoneMatches.filter(p => {
       const digits = p.replace(/\D/g, '');
+      // Must be 10 or 11 digits
+      if (digits.length < 10 || digits.length > 11) return false;
       // Exclude obvious fake patterns
-      if (digits.startsWith('123456')) return false;
+      if (digits.startsWith('123')) return false;
       if (digits.startsWith('000')) return false;
-      if (digits.startsWith('555')) return false; // US fake prefix
+      if (digits.includes('555')) return false; // US fake prefix
       if (digits === '1234567890') return false;
-      if (digits.length < 10) return false;
+      // Exclude year-like patterns (2020, 2021, 2022, etc.)
+      if (/^(19|20)\d{8}$/.test(digits)) return false;
+      if (/^\d{4}(19|20)\d{4}$/.test(digits)) return false;
+      // Phone must have proper area code (not start with 0 or 1 after country code)
+      const areaCode = digits.length === 11 ? digits.slice(1, 4) : digits.slice(0, 3);
+      if (areaCode.startsWith('0') || areaCode.startsWith('1')) return false;
       return true;
     });
     
@@ -204,10 +212,31 @@ async function scrapePageForContacts(url) {
       if (authorMatch) authorName = authorMatch[1];
     }
     
+    // Clean and decode email
+    let cleanEmail = emails[0] || '';
+    if (cleanEmail) {
+      cleanEmail = decodeURIComponent(cleanEmail.replace(/%20/g, '').trim());
+    }
+    
+    // Extract name from email if no author found
+    let name = authorName;
+    if (!name && cleanEmail) {
+      // Get name from email (e.g., "sharon" from "sharon@domain.com")
+      const emailName = cleanEmail.split('@')[0];
+      // Clean up and capitalize
+      name = emailName
+        .replace(/[0-9._-]/g, ' ')
+        .split(' ')
+        .filter(p => p.length > 1)
+        .map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
+        .join(' ')
+        .trim();
+    }
+    
     return {
-      email: emails[0] || '',
+      email: cleanEmail,
       phone: validPhones[0] || '',
-      authorName: authorName
+      authorName: name
     };
   } catch (err) {
     console.log('Scrape error for', url, ':', err.message);
