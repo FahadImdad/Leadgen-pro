@@ -132,6 +132,50 @@ app.get('/api/status', async (req, res) => {
   }
 });
 
+// Helper: Scrape page content to extract contact info
+async function scrapePageForContacts(url) {
+  try {
+    const response = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; LeadBot/1.0)' },
+      timeout: 10000
+    });
+    const html = await response.text();
+    
+    // Extract emails from page
+    const emailMatches = html.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
+    // Filter out common non-lead emails
+    const emails = emailMatches.filter(e => 
+      !e.includes('example.com') && 
+      !e.includes('email.com') &&
+      !e.includes('domain.com') &&
+      !e.includes('reddit.com') &&
+      !e.includes('privacy') &&
+      !e.includes('support@') &&
+      !e.includes('noreply') &&
+      !e.includes('info@')
+    );
+    
+    // Extract phones (various formats)
+    const phoneMatches = html.match(/(?:\+?1[-.\s]?)?\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}/g) || [];
+    
+    // Try to extract Reddit username from URL or page
+    let authorName = '';
+    if (url.includes('reddit.com')) {
+      const authorMatch = html.match(/"author"\s*:\s*"([^"]+)"/);
+      if (authorMatch) authorName = authorMatch[1];
+    }
+    
+    return {
+      email: emails[0] || '',
+      phone: phoneMatches[0] || '',
+      authorName: authorName
+    };
+  } catch (err) {
+    console.log('Scrape error for', url, ':', err.message);
+    return { email: '', phone: '', authorName: '' };
+  }
+}
+
 // API: Run extraction
 app.post('/api/extract', async (req, res) => {
   const { keywords, platforms, maxResults = 20, region = 'us', timeframe = 'd' } = req.body;
@@ -142,37 +186,44 @@ app.post('/api/extract', async (req, res) => {
   
   try {
     for (const keyword of keywords) {
-      // Google Search
+      // Enhanced search: look for posts with contact info
+      const emailSearchQuery = `"${keyword}" ("@gmail.com" OR "@yahoo.com" OR "@hotmail.com" OR "email me" OR "contact me at")`;
+      
+      // Google Search (with contact patterns)
       if (platforms.includes('google')) {
         console.log(`Searching Google for: ${keyword}`);
         try {
           const items = await callApifyActor('apify~google-search-scraper', {
-            queries: keyword,
+            queries: emailSearchQuery,
             maxPagesPerQuery: 1,
-            resultsPerPage: Math.min(maxResults, 50),
+            resultsPerPage: Math.min(maxResults * 3, 50), // Get more to filter
             countryCode: region === 'all' ? 'us' : region,
             languageCode: 'en'
           });
           
           if (items[0]?.organicResults) {
-            // Limit results to maxResults
-            const limitedResults = items[0].organicResults.slice(0, maxResults);
+            const limitedResults = items[0].organicResults.slice(0, maxResults * 2);
             for (const result of limitedResults) {
-              const lead = {
-                name: extractName(result.title),
-                email: extractEmail(result.description || ''),
-                phone: '',
-                source: 'Google',
-                query: keyword,
-                title: result.title,
-                url: result.url,
-                snippet: result.description || '',
-                extractedAt: new Date().toISOString()
-              };
+              // Scrape the page for actual contact info
+              console.log('Scraping:', result.url);
+              const contacts = await scrapePageForContacts(result.url);
               
-              if (!lead.email || !seenEmails.has(lead.email.toLowerCase())) {
-                if (lead.email) seenEmails.add(lead.email.toLowerCase());
-                results.push(lead);
+              if (contacts.email && !seenEmails.has(contacts.email.toLowerCase())) {
+                seenEmails.add(contacts.email.toLowerCase());
+                results.push({
+                  name: contacts.authorName || extractName(result.title),
+                  email: contacts.email,
+                  phone: contacts.phone || '',
+                  source: 'Google',
+                  query: keyword,
+                  title: result.title,
+                  url: result.url,
+                  snippet: result.description || '',
+                  extractedAt: new Date().toISOString()
+                });
+                
+                // Stop if we have enough leads with emails
+                if (results.length >= maxResults) break;
               }
             }
           }
@@ -181,37 +232,40 @@ app.post('/api/extract', async (req, res) => {
         }
       }
 
-      // Reddit (via Google - free)
+      // Reddit (via Google - search for posts with contacts)
       if (platforms.includes('reddit')) {
         console.log(`Searching Reddit via Google for: ${keyword}`);
         try {
           const items = await callApifyActor('apify~google-search-scraper', {
-            queries: `site:reddit.com "${keyword}"`,
+            queries: `site:reddit.com "${keyword}" ("@gmail.com" OR "@yahoo.com" OR "email" OR "contact")`,
             maxPagesPerQuery: 1,
-            resultsPerPage: Math.min(maxResults, 30),
+            resultsPerPage: Math.min(maxResults * 3, 30),
             countryCode: region === 'all' ? 'us' : region,
             languageCode: 'en'
           });
           
           if (items[0]?.organicResults) {
-            // Limit results to maxResults
-            const limitedResults = items[0].organicResults.slice(0, maxResults);
+            const limitedResults = items[0].organicResults.slice(0, maxResults * 2);
             for (const result of limitedResults) {
-              const lead = {
-                name: extractName(result.title),
-                email: extractEmail(result.description || ''),
-                phone: '',
-                source: 'Reddit',
-                query: keyword,
-                title: result.title,
-                url: result.url,
-                snippet: result.description || '',
-                extractedAt: new Date().toISOString()
-              };
+              // Scrape the page for actual contact info
+              console.log('Scraping Reddit:', result.url);
+              const contacts = await scrapePageForContacts(result.url);
               
-              if (!lead.email || !seenEmails.has(lead.email.toLowerCase())) {
-                if (lead.email) seenEmails.add(lead.email.toLowerCase());
-                results.push(lead);
+              if (contacts.email && !seenEmails.has(contacts.email.toLowerCase())) {
+                seenEmails.add(contacts.email.toLowerCase());
+                results.push({
+                  name: contacts.authorName || 'Reddit User',
+                  email: contacts.email,
+                  phone: contacts.phone || '',
+                  source: 'Reddit',
+                  query: keyword,
+                  title: result.title,
+                  url: result.url,
+                  snippet: result.description || '',
+                  extractedAt: new Date().toISOString()
+                });
+                
+                if (results.length >= maxResults) break;
               }
             }
           }
@@ -220,12 +274,12 @@ app.post('/api/extract', async (req, res) => {
         }
       }
 
-      // Upwork via Google
+      // Upwork via Google (Upwork doesn't show emails publicly, skip scraping)
       if (platforms.includes('upwork')) {
         console.log(`Searching Upwork via Google for: ${keyword}`);
         try {
           const items = await callApifyActor('apify~google-search-scraper', {
-            queries: `site:upwork.com "${keyword}"`,
+            queries: `site:upwork.com "${keyword}" job`,
             maxPagesPerQuery: 1,
             resultsPerPage: Math.min(maxResults, 30),
             countryCode: region === 'all' ? 'us' : region,
@@ -233,24 +287,22 @@ app.post('/api/extract', async (req, res) => {
           });
           
           if (items[0]?.organicResults) {
-            // Limit results to maxResults
             const limitedResults = items[0].organicResults.slice(0, maxResults);
             for (const result of limitedResults) {
-              const lead = {
+              // Upwork jobs don't have public emails - this is for reference only
+              // These leads need to be contacted through Upwork platform
+              results.push({
                 name: extractName(result.title),
-                email: extractEmail(result.description || ''),
+                email: '(contact via Upwork)',
                 phone: '',
                 source: 'Upwork',
                 query: keyword,
                 title: result.title,
                 url: result.url,
                 snippet: result.description || '',
-                extractedAt: new Date().toISOString()
-              };
-              if (!lead.email || !seenEmails.has(lead.email.toLowerCase())) {
-                if (lead.email) seenEmails.add(lead.email.toLowerCase());
-                results.push(lead);
-              }
+                extractedAt: new Date().toISOString(),
+                note: 'Contact through Upwork platform'
+              });
             }
           }
         } catch (err) {
@@ -290,20 +342,26 @@ app.post('/api/extract', async (req, res) => {
       }
     }
     
-    // Return ALL leads, not just ones with emails
-    allLeads = results;
+    // ONLY return leads with real emails (filter out placeholders)
+    const leadsWithEmail = results.filter(l => 
+      l.email && 
+      l.email.includes('@') && 
+      !l.email.includes('(contact via')
+    );
+    
+    allLeads = leadsWithEmail;
     
     // Count stats
-    const withEmail = results.filter(l => l.email).length;
-    const verified = results.filter(l => l.emailVerified).length;
+    const verified = leadsWithEmail.filter(l => l.emailVerified).length;
     
     res.json({ 
       success: true, 
-      count: results.length,
-      withEmail: withEmail,
+      count: leadsWithEmail.length,
+      totalScraped: results.length,
       verified: verified,
-      leads: results,
-      hunterCreditsUsed: hunterCreditsUsed
+      leads: leadsWithEmail,
+      hunterCreditsUsed: hunterCreditsUsed,
+      message: leadsWithEmail.length === 0 ? 'No leads with email found. Try different keywords or platforms.' : ''
     });
   } catch (err) {
     console.error('Extraction error:', err);
