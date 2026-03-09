@@ -16,6 +16,64 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const APIFY_TOKEN = process.env.APIFY_API_TOKEN;
 const HUNTER_API_KEY = process.env.HUNTER_API_KEY;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+// Gemini Flash: Extract lead info from page content
+async function extractWithGemini(pageText, url) {
+  if (!GEMINI_API_KEY) return null;
+  
+  try {
+    // Limit text to avoid token limits
+    const truncatedText = pageText.substring(0, 8000);
+    
+    const prompt = `Analyze this webpage content and extract lead information.
+
+WEBPAGE URL: ${url}
+WEBPAGE CONTENT:
+${truncatedText}
+
+TASK: Find if there's a PERSON (not a company) who is SEEKING services (like publishing, web development, design, marketing, etc.)
+
+If you find a potential lead, extract:
+1. FULL_NAME: The person's actual name (not company name)
+2. EMAIL: Their personal email address (not support@, info@, or company emails)
+3. PHONE: Their phone number (only if it looks like a real personal number)
+4. INTENT: What service are they looking for?
+5. IS_LEAD: true if this is someone SEEKING services, false if this is a company OFFERING services
+
+Respond ONLY in this exact JSON format (no markdown, no explanation):
+{"full_name": "...", "email": "...", "phone": "...", "intent": "...", "is_lead": true/false}
+
+If no valid lead found, respond: {"is_lead": false}`;
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.1,
+            maxOutputTokens: 200
+          }
+        })
+      }
+    );
+    
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    
+    // Parse JSON response
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+  } catch (err) {
+    console.log('Gemini extraction error:', err.message);
+  }
+  return null;
+}
 
 // Store for leads (in-memory for serverless)
 let allLeads = [];
@@ -136,10 +194,37 @@ app.get('/api/status', async (req, res) => {
 async function scrapePageForContacts(url) {
   try {
     const response = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; LeadBot/1.0)' },
-      timeout: 10000
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      signal: AbortSignal.timeout(10000)
     });
     const html = await response.text();
+    
+    // Extract plain text from HTML (remove tags)
+    const plainText = html
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    
+    // Use Gemini for smart extraction if available
+    if (GEMINI_API_KEY) {
+      const geminiResult = await extractWithGemini(plainText, url);
+      if (geminiResult && geminiResult.is_lead && geminiResult.email) {
+        return {
+          email: geminiResult.email,
+          phone: geminiResult.phone || '',
+          authorName: geminiResult.full_name || '',
+          intent: geminiResult.intent || '',
+          isLead: true
+        };
+      } else if (geminiResult && !geminiResult.is_lead) {
+        // Not a lead (company offering services)
+        return { email: '', phone: '', authorName: '', isLead: false };
+      }
+    }
+    
+    // Fallback to regex extraction if no Gemini or error
     
     // Extract emails from page
     const emailMatches = html.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
@@ -236,11 +321,12 @@ async function scrapePageForContacts(url) {
     return {
       email: cleanEmail,
       phone: validPhones[0] || '',
-      authorName: name
+      authorName: name,
+      isLead: true // Regex fallback assumes it might be a lead
     };
   } catch (err) {
     console.log('Scrape error for', url, ':', err.message);
-    return { email: '', phone: '', authorName: '' };
+    return { email: '', phone: '', authorName: '', isLead: false };
   }
 }
 
@@ -276,7 +362,8 @@ app.post('/api/extract', async (req, res) => {
               console.log('Scraping:', result.url);
               const contacts = await scrapePageForContacts(result.url);
               
-              if (contacts.email && !seenEmails.has(contacts.email.toLowerCase())) {
+              // Only add if it's a real lead (person seeking services) with email
+              if (contacts.isLead !== false && contacts.email && !seenEmails.has(contacts.email.toLowerCase())) {
                 seenEmails.add(contacts.email.toLowerCase());
                 results.push({
                   name: contacts.authorName || extractName(result.title),
@@ -284,6 +371,7 @@ app.post('/api/extract', async (req, res) => {
                   phone: contacts.phone || '',
                   source: 'Google',
                   query: keyword,
+                  intent: contacts.intent || '',
                   title: result.title,
                   url: result.url,
                   snippet: result.description || '',
@@ -319,7 +407,8 @@ app.post('/api/extract', async (req, res) => {
               console.log('Scraping Reddit:', result.url);
               const contacts = await scrapePageForContacts(result.url);
               
-              if (contacts.email && !seenEmails.has(contacts.email.toLowerCase())) {
+              // Only add if it's a real lead with email
+              if (contacts.isLead !== false && contacts.email && !seenEmails.has(contacts.email.toLowerCase())) {
                 seenEmails.add(contacts.email.toLowerCase());
                 results.push({
                   name: contacts.authorName || 'Reddit User',
@@ -327,6 +416,7 @@ app.post('/api/extract', async (req, res) => {
                   phone: contacts.phone || '',
                   source: 'Reddit',
                   query: keyword,
+                  intent: contacts.intent || '',
                   title: result.title,
                   url: result.url,
                   snippet: result.description || '',
