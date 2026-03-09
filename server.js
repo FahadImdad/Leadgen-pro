@@ -155,7 +155,9 @@ app.post('/api/extract', async (req, res) => {
           });
           
           if (items[0]?.organicResults) {
-            for (const result of items[0].organicResults) {
+            // Limit results to maxResults
+            const limitedResults = items[0].organicResults.slice(0, maxResults);
+            for (const result of limitedResults) {
               const lead = {
                 name: extractName(result.title),
                 email: extractEmail(result.description || ''),
@@ -192,7 +194,9 @@ app.post('/api/extract', async (req, res) => {
           });
           
           if (items[0]?.organicResults) {
-            for (const result of items[0].organicResults) {
+            // Limit results to maxResults
+            const limitedResults = items[0].organicResults.slice(0, maxResults);
+            for (const result of limitedResults) {
               const lead = {
                 name: extractName(result.title),
                 email: extractEmail(result.description || ''),
@@ -229,7 +233,9 @@ app.post('/api/extract', async (req, res) => {
           });
           
           if (items[0]?.organicResults) {
-            for (const result of items[0].organicResults) {
+            // Limit results to maxResults
+            const limitedResults = items[0].organicResults.slice(0, maxResults);
+            for (const result of limitedResults) {
               const lead = {
                 name: extractName(result.title),
                 email: extractEmail(result.description || ''),
