@@ -372,15 +372,34 @@ app.post('/api/extract', async (req, res) => {
   console.log('Starting extraction:', { keywords, platforms, maxResults });
   
   const results = [];
+  const targetCount = maxResults; // How many we need to find
+  const MAX_ATTEMPTS = 5; // Max search attempts per platform
+  let attempts = 0;
+  
+  // Different query variations to try
+  const queryVariations = [
+    (kw) => `("looking for ${kw}" OR "need ${kw}") ("@gmail.com" OR "@yahoo.com")`,
+    (kw) => `("hiring ${kw}" OR "want ${kw}") "email" "contact"`,
+    (kw) => `"I need ${kw}" "@gmail.com"`,
+    (kw) => `"looking for ${kw}" "reach me" OR "contact me"`,
+    (kw) => `"${kw}" "my email is" OR "email me at"`
+  ];
   
   try {
     for (const keyword of keywords) {
-      // Enhanced search: look for people SEEKING services (not companies offering)
-      const emailSearchQuery = `("looking for ${keyword}" OR "need ${keyword}" OR "searching for ${keyword}" OR "hiring ${keyword}" OR "want ${keyword}") ("@gmail.com" OR "@yahoo.com" OR "email me" OR "contact me")`;
+      // Keep searching until we have enough leads
+      let variationIndex = 0;
       
-      // Google Search (with contact patterns)
-      if (platforms.includes('google')) {
-        console.log(`Searching Google for: ${keyword}`);
+      while (results.length < targetCount && variationIndex < queryVariations.length) {
+        const emailSearchQuery = queryVariations[variationIndex](keyword);
+        variationIndex++;
+        attempts++;
+        
+        console.log(`Attempt ${attempts}: Searching with query variation ${variationIndex}...`);
+      
+        // Google Search (with contact patterns)
+        if (platforms.includes('google') && results.length < targetCount) {
+          console.log(`Searching Google for: ${keyword}`);
         try {
           const items = await callApifyActor('apify~google-search-scraper', {
             queries: emailSearchQuery,
@@ -430,7 +449,7 @@ app.post('/api/extract', async (req, res) => {
       }
 
       // Reddit (via Google - search for posts with contacts)
-      if (platforms.includes('reddit')) {
+      if (platforms.includes('reddit') && results.length < targetCount) {
         console.log(`Searching Reddit via Google for: ${keyword}`);
         try {
           const items = await callApifyActor('apify~google-search-scraper', {
@@ -474,7 +493,7 @@ app.post('/api/extract', async (req, res) => {
       }
 
       // Upwork via Google (Upwork doesn't show emails publicly, skip scraping)
-      if (platforms.includes('upwork')) {
+      if (platforms.includes('upwork') && results.length < targetCount) {
         console.log(`Searching Upwork via Google for: ${keyword}`);
         try {
           const items = await callApifyActor('apify~google-search-scraper', {
@@ -510,7 +529,7 @@ app.post('/api/extract', async (req, res) => {
       }
 
       // LinkedIn via Google
-      if (platforms.includes('linkedin')) {
+      if (platforms.includes('linkedin') && results.length < targetCount) {
         console.log(`Searching LinkedIn via Google for: ${keyword}`);
         try {
           const items = await callApifyActor('apify~google-search-scraper', {
@@ -552,7 +571,7 @@ app.post('/api/extract', async (req, res) => {
       }
 
       // Facebook via Google
-      if (platforms.includes('facebook')) {
+      if (platforms.includes('facebook') && results.length < targetCount) {
         console.log(`Searching Facebook via Google for: ${keyword}`);
         try {
           const items = await callApifyActor('apify~google-search-scraper', {
@@ -594,7 +613,7 @@ app.post('/api/extract', async (req, res) => {
       }
 
       // Instagram via Google
-      if (platforms.includes('instagram')) {
+      if (platforms.includes('instagram') && results.length < targetCount) {
         console.log(`Searching Instagram via Google for: ${keyword}`);
         try {
           const items = await callApifyActor('apify~google-search-scraper', {
@@ -636,7 +655,7 @@ app.post('/api/extract', async (req, res) => {
       }
 
       // Twitter/X via Google
-      if (platforms.includes('twitter')) {
+      if (platforms.includes('twitter') && results.length < targetCount) {
         console.log(`Searching Twitter via Google for: ${keyword}`);
         try {
           const items = await callApifyActor('apify~google-search-scraper', {
@@ -676,6 +695,10 @@ app.post('/api/extract', async (req, res) => {
           console.log('Twitter error:', err.message);
         }
       }
+      
+      } // end while loop - keep searching until we have enough
+      
+      console.log(`Found ${results.length}/${targetCount} leads for "${keyword}"`);
     }
 
     // Enrich leads with Hunter.io (try to find/verify emails)
