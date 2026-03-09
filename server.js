@@ -57,42 +57,43 @@ async function extractWithGemini(pageText, url) {
     // Limit text to avoid token limits
     const truncatedText = pageText.substring(0, 8000);
     
-    const prompt = `You are a lead qualification expert. Analyze this webpage to find CUSTOMERS who need services.
+    const prompt = `You are a lead qualification expert. Find CUSTOMERS who want to PAY for services.
 
 URL: ${url}
 
 CONTENT:
 ${truncatedText}
 
-CRITICAL RULES:
-- We want CUSTOMERS/CLIENTS who are LOOKING FOR services
-- We DO NOT want companies/businesses that OFFER/SELL services
-- A publishing company = NOT A LEAD (they sell services)
-- An author saying "I need a publisher" = LEAD (they need services)
-- A web agency = NOT A LEAD
-- Someone posting "looking for web developer" = LEAD
+WE WANT - Potential paying customers:
+- Individual who needs help with their OWN project (their book, website, business)
+- Person asking "can anyone help me with..." or "I need someone to..."
+- Someone willing to PAY for a service
+
+WE DO NOT WANT:
+- Companies/agencies OFFERING services (they're competitors)
+- Employers HIRING staff/employees (they want employees, not freelance services)
+- Job postings for full-time positions
+- Publishing houses, agencies, studios looking for managers/staff
+- Anyone who OWNS a service business
+
+EXAMPLES:
+❌ "Need book publishing manager for our publishing house" = EMPLOYER hiring, NOT a customer
+❌ "We're hiring web developers" = EMPLOYER, NOT customer
+❌ "Shakti Digital Services" = COMPANY offering services
+✅ "I wrote a book and need help getting it published" = CUSTOMER
+✅ "Looking for someone to build my website" = CUSTOMER
+✅ "Can anyone recommend a good web developer for my startup" = CUSTOMER
 
 DISQUALIFY if:
-- It's a company website offering services
-- Email is company email (info@, contact@, support@, company names)
-- The page is advertising/selling services
-- It's a directory, list, or warning page about companies
-
-QUALIFY only if:
-- Individual person seeking/needing help
-- They posted asking for services
-- Personal email (gmail, yahoo, outlook)
-
-Extract ONLY if this is a real customer seeking services:
-- FULL_NAME: The person's name (not company)
-- EMAIL: Their personal email
-- PHONE: Their personal phone (or empty)
-- INTENT: What service they need
+- They OWN a publishing house, agency, studio, company
+- They're hiring employees/managers/staff
+- Email contains: publisher, digital, agency, media, services, studio
+- It's a job posting
 
 JSON response only:
 {"full_name": "...", "email": "...", "phone": "...", "intent": "...", "is_lead": true}
 
-If NOT a customer seeking services, respond:
+If NOT a paying customer, respond:
 {"is_lead": false}`;
 
     const response = await fetch(
@@ -392,13 +393,13 @@ app.post('/api/extract', async (req, res) => {
   const MAX_ATTEMPTS = 5; // Max search attempts per platform
   let attempts = 0;
   
-  // Different query variations to try
+  // Different query variations to try - focus on CUSTOMERS seeking services, not employers hiring
   const queryVariations = [
-    (kw) => `("looking for ${kw}" OR "need ${kw}") ("@gmail.com" OR "@yahoo.com")`,
-    (kw) => `("hiring ${kw}" OR "want ${kw}") "email" "contact"`,
-    (kw) => `"I need ${kw}" "@gmail.com"`,
-    (kw) => `"looking for ${kw}" "reach me" OR "contact me"`,
-    (kw) => `"${kw}" "my email is" OR "email me at"`
+    (kw) => `("I need ${kw}" OR "I'm looking for ${kw}" OR "can anyone recommend ${kw}") "@gmail.com"`,
+    (kw) => `("help me with ${kw}" OR "need help with ${kw}" OR "looking for ${kw} service") "email"`,
+    (kw) => `("want to hire ${kw}" OR "need ${kw} for my project" OR "seeking ${kw} freelancer") "contact"`,
+    (kw) => `("recommend a ${kw}" OR "find a good ${kw}" OR "who can help with ${kw}") "@gmail.com"`,
+    (kw) => `"${kw}" "my project" OR "my website" OR "my book" OR "my business" "email"`
   ];
   
   try {
