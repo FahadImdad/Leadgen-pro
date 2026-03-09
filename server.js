@@ -292,7 +292,7 @@ async function scrapePageForContacts(url) {
     // Filter out fake/example numbers and year-like patterns
     const validPhones = phoneMatches.filter(p => {
       const digits = p.replace(/\D/g, '');
-      // Must be 10 or 11 digits
+      // Must be exactly 10 or 11 digits (not more - excludes IDs)
       if (digits.length < 10 || digits.length > 11) return false;
       // Exclude obvious fake patterns
       if (digits.startsWith('123')) return false;
@@ -302,6 +302,8 @@ async function scrapePageForContacts(url) {
       // Exclude year-like patterns (2020, 2021, 2022, etc.)
       if (/^(19|20)\d{8}$/.test(digits)) return false;
       if (/^\d{4}(19|20)\d{4}$/.test(digits)) return false;
+      // Exclude patterns that look like IDs (all digits, no formatting in original)
+      if (/^\d{10,}$/.test(p)) return false; // No formatting = probably an ID
       // Phone must have proper area code (not start with 0 or 1 after country code)
       const areaCode = digits.length === 11 ? digits.slice(1, 4) : digits.slice(0, 3);
       if (areaCode.startsWith('0') || areaCode.startsWith('1')) return false;
