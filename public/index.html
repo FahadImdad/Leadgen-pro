@@ -673,10 +673,10 @@ web development</textarea>
             <thead>
               <tr>
                 <th>Customer Name</th>
-                <th>Email</th>
-                <th>Phone</th>
+                <th>Contact</th>
+                <th>Intent</th>
                 <th>Source</th>
-                <th>Looking For</th>
+                <th>What They Need</th>
                 <th>Post Title</th>
                 <th>Link</th>
               </tr>
@@ -798,15 +798,28 @@ web development</textarea>
       leads.forEach(lead => {
         const badgeClass = `badge-${(lead.source || '').toLowerCase()}`;
         const isDmLead = lead.contactMethod === 'dm' || (lead.email && lead.email.startsWith('(DM'));
+        const intentScore = lead.intentScore || 0;
+        const intentColor = intentScore >= 8 ? 'var(--success)' : intentScore >= 5 ? 'var(--warning)' : 'var(--text-muted)';
+        const intentBars = '🔥'.repeat(Math.min(Math.floor(intentScore / 2), 5));
+        
+        // Build contact info
+        let contactHtml = '';
+        if (lead.email && lead.email.includes('@')) {
+          contactHtml = `<span style="color: var(--success);">📧 ${lead.email}</span>`;
+        } else if (isDmLead) {
+          const profileLink = lead.url || '#';
+          contactHtml = `<span style="color: var(--warning);">💬 ${lead.username || 'DM on ' + lead.source}</span>`;
+        } else {
+          contactHtml = '<span style="color: var(--text-muted);">-</span>';
+        }
+        
         const row = document.createElement('tr');
         row.innerHTML = `
-          <td>${lead.name || '-'}</td>
-          <td style="color: ${isDmLead ? 'var(--warning)' : (lead.email ? 'var(--success)' : 'var(--text-muted)')}; font-weight: ${lead.email ? '500' : '400'};">
-            ${isDmLead ? '💬 ' : ''}${lead.email || '-'}
-          </td>
-          <td>${lead.phone || '-'}</td>
+          <td>${lead.name || lead.username || '-'}</td>
+          <td>${contactHtml}</td>
+          <td style="color: ${intentColor}; font-weight: 600;">${intentScore}/10 ${intentBars}</td>
           <td><span class="badge ${badgeClass}">${lead.source}</span></td>
-          <td class="truncate">${lead.query || '-'}</td>
+          <td class="truncate" title="${lead.intent || ''}">${lead.intent || lead.query || '-'}</td>
           <td class="truncate">${lead.title || '-'}</td>
           <td>${lead.url ? `<a href="${lead.url}" target="_blank" style="color: var(--primary);">🔗 Open</a>` : '-'}</td>
         `;
