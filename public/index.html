@@ -520,12 +520,16 @@
       </div>
       <div class="header-stats">
         <div class="stat-card">
-          <div class="stat-value" id="totalExtracted">0</div>
-          <div class="stat-label">Total Extracted</div>
+          <div class="stat-value" id="requestedCount">0</div>
+          <div class="stat-label">Requested</div>
         </div>
-        <div class="stat-card">
-          <div class="stat-value" id="uniqueEmails">0</div>
-          <div class="stat-label">With Email</div>
+        <div class="stat-card" style="border-color: var(--success);">
+          <div class="stat-value" id="foundCount" style="color: var(--success);">0</div>
+          <div class="stat-label">Found ✅</div>
+        </div>
+        <div class="stat-card" style="border-color: var(--danger);">
+          <div class="stat-value" id="notAvailableCount" style="color: var(--danger);">0</div>
+          <div class="stat-label">Not Available ❌</div>
         </div>
       </div>
     </div>
@@ -766,7 +770,7 @@ web development</textarea>
         if (data.success) {
           allLeads = data.leads;
           displayResults(data.leads);
-          updateStats(data.leads);
+          updateStats(data);
         } else {
           alert('Error: ' + data.error);
         }
@@ -804,10 +808,10 @@ web development</textarea>
     }
     
     // Update stats
-    function updateStats(leads) {
-      document.getElementById('totalExtracted').textContent = leads.length;
-      const withEmail = leads.filter(l => l.email).length;
-      document.getElementById('uniqueEmails').textContent = withEmail;
+    function updateStats(data) {
+      document.getElementById('requestedCount').textContent = data.requested || 0;
+      document.getElementById('foundCount').textContent = data.found || 0;
+      document.getElementById('notAvailableCount').textContent = data.notAvailable || 0;
     }
     
     // Copy emails

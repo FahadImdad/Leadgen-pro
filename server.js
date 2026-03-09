@@ -723,7 +723,9 @@ app.post('/api/extract', async (req, res) => {
     
     res.json({ 
       success: true, 
-      count: leadsWithEmail.length,
+      requested: maxResults * platforms.length * keywords.length,
+      found: leadsWithEmail.length,
+      notAvailable: Math.max(0, (maxResults * platforms.length * keywords.length) - leadsWithEmail.length),
       totalScraped: results.length,
       verified: verified,
       leads: leadsWithEmail,
