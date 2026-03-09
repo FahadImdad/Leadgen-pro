@@ -71,43 +71,48 @@ async function extractWithGemini(pageText, url) {
     // Limit text to avoid token limits
     const truncatedText = pageText.substring(0, 8000);
     
-    const prompt = `You are a lead qualification expert. Find CUSTOMERS who want to PAY for services.
+    const prompt = `You are a strict lead qualification expert. Find ONLY real customers actively SEEKING to PAY for services.
 
 URL: ${url}
 
 CONTENT:
 ${truncatedText}
 
-WE WANT - Potential paying customers:
-- Individual who needs help with their OWN project (their book, website, business)
-- Person asking "can anyone help me with..." or "I need someone to..."
-- Someone willing to PAY for a service
+✅ WE WANT - Someone actively seeking help RIGHT NOW:
+- "I need someone to build my website"
+- "Looking for a developer to help with my project"
+- "Can anyone recommend someone to publish my book?"
+- "Hiring a freelancer for..." (personal project, not company)
+- Reddit/forum posts asking for help with THEIR OWN project
 
-WE DO NOT WANT:
-- Companies/agencies OFFERING services (they're competitors)
-- Employers HIRING staff/employees (they want employees, not freelance services)
-- Job postings for full-time positions
-- Publishing houses, agencies, studios looking for managers/staff
-- Anyone who OWNS a service business
+❌ REJECT ALL OF THESE:
+- Blog posts or articles ABOUT the topic ("How to...", "Guide to...", "Tips for...")
+- Tutorials or educational content
+- FAQ pages
+- Portfolio or personal websites
+- Service provider pages (people OFFERING services)
+- Companies/agencies advertising their services
+- Job postings for employees
+- News articles or reviews
+- Tool lists or resource pages ("The tools I use...")
+- Anyone writing ABOUT the topic rather than SEEKING help
+
+CRITICAL: The person must be ASKING for help, not WRITING about the topic.
 
 EXAMPLES:
-❌ "Need book publishing manager for our publishing house" = EMPLOYER hiring, NOT a customer
-❌ "We're hiring web developers" = EMPLOYER, NOT customer
-❌ "Shakti Digital Services" = COMPANY offering services
-✅ "I wrote a book and need help getting it published" = CUSTOMER
-✅ "Looking for someone to build my website" = CUSTOMER
-✅ "Can anyone recommend a good web developer for my startup" = CUSTOMER
+❌ "How to Create My Website" = TUTORIAL, reject
+❌ "The tools I use to build websites" = BLOG POST, reject
+❌ "FAQ | George Smith Web Design" = SERVICE PROVIDER, reject
+❌ "Setting up a website - A complete guide" = TUTORIAL, reject
+❌ "We're hiring web developers" = EMPLOYER, reject
+✅ "I wrote a novel and need help getting it published" = CUSTOMER seeking help
+✅ "Can someone build me an e-commerce site? Budget $500" = CUSTOMER seeking help
+✅ "Looking for book publishing recommendations for my memoir" = CUSTOMER seeking help
 
-DISQUALIFY if:
-- They OWN a publishing house, agency, studio, company
-- They're hiring employees/managers/staff
-- Email contains: publisher, digital, agency, media, services, studio
-- It's a job posting
+JSON response only. If this is a REAL customer seeking help:
+{"full_name": "...", "email": "...", "phone": "...", "intent": "what they need", "is_lead": true}
 
-JSON response only:
-{"full_name": "...", "email": "...", "phone": "...", "intent": "...", "is_lead": true}
-
-If NOT a paying customer, respond:
+If NOT a real customer seeking help (tutorial, blog, FAQ, service provider, etc.):
 {"is_lead": false}`;
 
     const response = await fetch(
@@ -406,11 +411,35 @@ async function scrapePageForContacts(url) {
         .trim();
     }
     
+    // Check if content looks like a tutorial/blog/FAQ (NOT a real lead)
+    const lowerText = plainText.toLowerCase();
+    const badContentPatterns = [
+      'how to ', 'guide to', 'tutorial', 'step by step', 'tips for',
+      'faq', 'frequently asked', 'our services', 'we offer', 'contact us',
+      'about us', 'our team', 'our company', 'pricing', 'packages',
+      'get started', 'sign up', 'subscribe', 'newsletter',
+      'the tools i use', 'my favorite tools', 'best tools for',
+      'complete guide', 'ultimate guide', 'beginner', 'learn how',
+      'copyright ©', 'all rights reserved', 'privacy policy', 'terms of service'
+    ];
+    const isBadContent = badContentPatterns.some(pattern => lowerText.includes(pattern));
+    
+    // Check if content has seeking-help language (GOOD sign)
+    const goodContentPatterns = [
+      'i need', 'looking for someone', 'can anyone help', 'can someone',
+      'recommend me', 'hiring for my', 'need help with my', 'budget is',
+      'dm me', 'message me', 'please help', 'any recommendations'
+    ];
+    const hasSeekingLanguage = goodContentPatterns.some(pattern => lowerText.includes(pattern));
+    
+    // Only mark as lead if it has seeking language OR doesn't have bad patterns
+    const isLead = hasSeekingLanguage || !isBadContent;
+    
     return {
       email: cleanEmail,
       phone: validPhones[0] || '',
       authorName: name,
-      isLead: true // Regex fallback assumes it might be a lead
+      isLead: isLead
     };
   } catch (err) {
     console.log('Scrape error for', url, ':', err.message);
@@ -429,14 +458,17 @@ app.post('/api/extract', async (req, res) => {
   const MAX_ATTEMPTS = 5; // Max search attempts per platform
   let attempts = 0;
   
-  // Different query variations - find CUSTOMERS who want to PAY for services
-  // Avoid: job seekers, service providers, portfolios
+  // Different query variations - find CUSTOMERS actively SEEKING services
+  // Focus on seeking language + keyword + email
   const queryVariations = [
-    (kw) => `("build my website" OR "create my website" OR "develop my website") "@gmail.com"`,
-    (kw) => `("need someone to build" OR "looking for someone to create" OR "who can make my") "website" OR "app" "@gmail.com"`,
-    (kw) => `("publish my book" OR "help me publish" OR "get my book published") "@gmail.com"`,
-    (kw) => `("need a freelancer" OR "looking for freelancer to" OR "hire freelancer for my") "${kw}" "email"`,
-    (kw) => `site:reddit.com ("need help building" OR "can someone build me" OR "looking to pay someone") "${kw}"`
+    // Direct seeking phrases with keyword
+    (kw) => `("need help with" OR "looking for someone to") "${kw}" "@gmail.com"`,
+    (kw) => `("can anyone help me" OR "can someone recommend") "${kw}" "@gmail.com"`,
+    (kw) => `("hiring" OR "need a freelancer for") "my" "${kw}" "@gmail.com"`,
+    // Reddit-specific (high intent)
+    (kw) => `site:reddit.com ("need" OR "looking for" OR "help me with") "${kw}" -tutorial -guide`,
+    // Forums and Q&A
+    (kw) => `(site:quora.com OR site:reddit.com) "I need" "${kw}" "help"`,
   ];
   
   try {
