@@ -829,12 +829,19 @@ web development</textarea>
           <p style="margin-top: 10px;">Configure your settings above and click "Start Extraction"</p>
         </div>
         
-        <div id="loadingState" class="empty-state hidden" style="max-width: 100%; padding: 15px;">
+        <div id="loadingState" class="empty-state hidden" style="max-width: 100%; padding: 15px; text-align: left;">
           <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 15px;">
             <div class="loading-spinner" style="width: 35px; height: 35px; flex-shrink: 0;"></div>
             <div style="min-width: 0;">
               <div class="loading-progress" id="loadingProgress" style="margin: 0; font-size: 1.3rem;">0/5 leads</div>
               <div class="loading-text" id="loadingText" style="font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Starting search...</div>
+            </div>
+          </div>
+          
+          <!-- Live Leads Preview -->
+          <div id="liveLeadsPreview" style="margin-bottom: 15px; display: none;">
+            <div style="font-size: 0.85rem; font-weight: 600; margin-bottom: 10px; color: var(--success);">✅ Leads Found:</div>
+            <div id="liveLeadsList" style="background: var(--bg-input); border-radius: 8px; padding: 10px; max-height: 150px; overflow-y: auto;">
             </div>
           </div>
           
@@ -846,7 +853,7 @@ web development</textarea>
               <span style="width: 10px; height: 10px; border-radius: 50%; background: #27ca40; flex-shrink: 0;"></span>
               <span style="margin-left: 8px; color: #8b949e; font-size: 0.65rem;">AI Console</span>
             </div>
-            <div id="loadingDetails" style="height: 200px; overflow-y: auto; overflow-x: hidden; line-height: 1.5; word-break: break-all;">
+            <div id="loadingDetails" style="height: 150px; overflow-y: auto; overflow-x: hidden; line-height: 1.5; word-break: break-all;">
               <div style="color: #8b949e;">$ Initializing...</div>
             </div>
           </div>
@@ -926,6 +933,32 @@ web development</textarea>
       // Single handler: listen to checkbox change only (label click triggers this)
       checkbox.addEventListener('change', () => syncPlatform(item));
     });
+    
+    // Add lead to live preview
+    function addLiveLeadPreview(lead) {
+      const preview = document.getElementById('liveLeadsPreview');
+      const list = document.getElementById('liveLeadsList');
+      if (!preview || !list) return;
+      
+      preview.style.display = 'block';
+      
+      const card = document.createElement('div');
+      card.style.cssText = 'background: var(--bg-card); padding: 10px; border-radius: 6px; margin-bottom: 8px; border-left: 3px solid var(--success);';
+      
+      const emailDisplay = lead.email === 'With DM Me' 
+        ? `<span style="color: var(--warning);">💬 DM Required</span>` 
+        : `<span style="color: var(--success);">📧 ${lead.email}</span>`;
+      
+      card.innerHTML = `
+        <div style="font-weight: 600; font-size: 0.9rem; margin-bottom: 4px;">${lead.name}</div>
+        <div style="font-size: 0.8rem;">${emailDisplay}</div>
+        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">
+          <span style="color: var(--primary);">🔥 ${lead.intentScore}/10</span> · ${lead.source}
+        </div>
+      `;
+      
+      list.insertBefore(card, list.firstChild);
+    }
     
     // Activity log for transparency - terminal style
     function addActivityLog(message, type = 'info') {
@@ -1033,6 +1066,11 @@ web development</textarea>
       document.getElementById('loadingText').textContent = '🔍 Starting search...';
       document.getElementById('loadingProgress').textContent = '0/' + maxResults + ' leads';
       
+      // Clear live preview
+      document.getElementById('liveLeadsPreview').style.display = 'none';
+      document.getElementById('liveLeadsList').innerHTML = '';
+      document.getElementById('loadingDetails').innerHTML = '<div style="color: #8b949e;">$ Starting extraction...</div>';
+      
       try {
         // Use Server-Sent Events for real-time progress
         const params = new URLSearchParams({
@@ -1070,6 +1108,9 @@ web development</textarea>
             addActivityLog(`LEAD QUALIFIED: ${data.lead.name}`, 'success');
             addActivityLog(`↳ Email: ${data.lead.email}`, 'success');
             addActivityLog(`↳ Intent Score: ${data.lead.intentScore}/10`, 'success');
+            
+            // Add to live preview list
+            addLiveLeadPreview(data.lead);
           }
           
           if (data.type === 'complete') {
