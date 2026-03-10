@@ -492,13 +492,16 @@ app.post('/api/extract', async (req, res) => {
                                 qualification.name !== 'Unknown' &&
                                 qualification.name !== '-';
                 
-                // Only include if has real email
-                if (hasRealEmail) {
+                // Check if DM lead (has username but no email)
+                const isDmLead = !hasRealEmail && qualification.username && qualification.username.length > 1;
+                
+                // Accept both email leads AND DM leads
+                if (hasRealEmail || isDmLead) {
                   stats.qualified++;
                   
                   const lead = {
                     name: hasName ? qualification.name : (qualification.username || '-'),
-                    email: qualification.email,
+                    email: hasRealEmail ? qualification.email : 'With DM Me',
                     phone: qualification.phone && qualification.phone !== '' ? qualification.phone : '-',
                     source: detectedPlatform,
                     query: keyword,
@@ -507,15 +510,16 @@ app.post('/api/extract', async (req, res) => {
                     title: result.title,
                     url: result.url,
                     username: qualification.username || '',
-                    contactMethod: 'email',
-                    emailVerified: true,
+                    contactMethod: hasRealEmail ? 'email' : 'dm',
+                    emailVerified: hasRealEmail,
                     extractedAt: new Date().toISOString()
                   };
                   
                   results.push(lead);
-                  console.log(`✅ Lead #${results.length}/${maxResults}: ${lead.name} | ${lead.email} | Intent: ${lead.intentScore}/10`);
+                  const contactType = hasRealEmail ? '📧' : '💬';
+                  console.log(`✅ Lead #${results.length}/${maxResults}: ${contactType} ${lead.name} | ${lead.email} | Intent: ${lead.intentScore}/10`);
                 } else {
-                  console.log(`⚠️ Skipped: No real email found`);
+                  console.log(`⚠️ Skipped: No email or username found`);
                 }
               } else {
                 console.log(`❌ Rejected: ${qualification.reason || 'Not seeking services'}`);
