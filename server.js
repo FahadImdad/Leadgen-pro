@@ -1,5 +1,5 @@
 /**
- * LeadGen Pro - AI Agent Backend
+ * LeadGen Pro - AI Agent Backend with Bright Data
  * Multi-platform lead discovery with LLM-powered qualification
  */
 
@@ -14,114 +14,132 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+// API Keys
+const BRIGHT_DATA_API_KEY = process.env.BRIGHT_DATA_API_KEY;
 const APIFY_TOKEN = process.env.APIFY_API_TOKEN;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const SERPER_API_KEY = process.env.SERPER_API_KEY;
+
+console.log('🔑 API Keys loaded:', {
+  brightData: BRIGHT_DATA_API_KEY ? '✅' : '❌',
+  apify: APIFY_TOKEN ? '✅' : '❌',
+  gemini: GEMINI_API_KEY ? '✅' : '❌'
+});
 
 // ============================================================
-// AI AGENT: Query Planner
-// Generates optimized search queries for each platform
+// BRIGHT DATA SERP API
 // ============================================================
-async function planSearchQueries(keyword, platforms) {
-  if (!GEMINI_API_KEY) {
-    // Fallback to default queries
-    return getDefaultQueries(keyword, platforms);
+async function brightDataSearch(query, options = {}) {
+  if (!BRIGHT_DATA_API_KEY) {
+    console.log('No Bright Data key, falling back to Apify');
+    return apifySearch(query, options);
   }
-
+  
   try {
-    const prompt = `You are a lead generation expert. Generate search queries to find CUSTOMERS who need "${keyword}" services.
-
-We want to find REAL PEOPLE who are:
-- Asking for help with their own project
-- Looking for recommendations
-- Seeking to hire someone
-- Willing to pay for services
-
-We do NOT want:
-- Companies offering ${keyword} services
-- Tutorials or guides
-- Job postings for employees
-- News articles
-
-Generate 3 search queries for each platform. Return JSON only:
-{
-  "queries": {
-    "google": ["query1", "query2", "query3"],
-    "reddit": ["query1", "query2", "query3"],
-    "linkedin": ["query1", "query2", "query3"],
-    "twitter": ["query1", "query2", "query3"],
-    "quora": ["query1", "query2", "query3"],
-    "facebook": ["query1", "query2", "query3"]
-  }
-}
-
-Focus on intent phrases like "I need", "looking for", "help me", "recommend", "hire".
-Include site: operators where appropriate.`;
-
-    const response = await callGemini(prompt);
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      return parsed.queries;
+    const params = new URLSearchParams({
+      q: query,
+      brd_json: '1',
+      gl: options.region || 'us',
+      hl: 'en',
+      num: options.limit || 10
+    });
+    
+    // Add time filter if specified
+    if (options.timeframe === 'd') params.append('tbs', 'qdr:d');
+    else if (options.timeframe === 'w') params.append('tbs', 'qdr:w');
+    else if (options.timeframe === 'm') params.append('tbs', 'qdr:m');
+    
+    const url = `https://www.google.com/search?${params.toString()}`;
+    
+    console.log(`🔍 Bright Data SERP: ${query.substring(0, 50)}...`);
+    
+    const response = await fetch('https://api.brightdata.com/request', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${BRIGHT_DATA_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        zone: 'serp_api1',
+        url: url,
+        format: 'json'
+      })
+    });
+    
+    if (!response.ok) {
+      const errText = await response.text();
+      console.log('Bright Data error:', response.status, errText);
+      return apifySearch(query, options);
     }
+    
+    const data = await response.json();
+    
+    // Parse organic results
+    const results = (data.organic || []).map(r => ({
+      title: r.title,
+      url: r.link || r.url,
+      snippet: r.description || r.snippet
+    }));
+    
+    console.log(`✅ Found ${results.length} results`);
+    return results;
+    
   } catch (err) {
-    console.log('Query planning error:', err.message);
+    console.log('Bright Data error:', err.message);
+    return apifySearch(query, options);
   }
-  
-  return getDefaultQueries(keyword, platforms);
-}
-
-function getDefaultQueries(keyword, platforms) {
-  const queries = {};
-  
-  // Intent-focused search patterns
-  const intentPhrases = [
-    `"need help with" OR "looking for someone" "${keyword}"`,
-    `"can anyone recommend" OR "I need" "${keyword}"`,
-    `"hire" OR "looking for" "${keyword}" "my project" OR "my business"`
-  ];
-  
-  if (platforms.includes('google')) {
-    queries.google = intentPhrases;
-  }
-  if (platforms.includes('reddit')) {
-    queries.reddit = [
-      `site:reddit.com ("I need" OR "looking for" OR "help me") "${keyword}"`,
-      `site:reddit.com ("recommend" OR "advice") "${keyword}" "my"`,
-      `site:reddit.com/r/forhire OR site:reddit.com/r/slavelabour "${keyword}"`
-    ];
-  }
-  if (platforms.includes('linkedin')) {
-    queries.linkedin = [
-      `site:linkedin.com/posts ("looking for" OR "need") "${keyword}"`,
-      `site:linkedin.com ("seeking" OR "hiring") "${keyword}" "@gmail.com"`,
-    ];
-  }
-  if (platforms.includes('twitter')) {
-    queries.twitter = [
-      `site:twitter.com OR site:x.com ("need" OR "looking for") "${keyword}"`,
-      `site:twitter.com ("help me" OR "anyone know") "${keyword}"`,
-    ];
-  }
-  if (platforms.includes('quora')) {
-    queries.quora = [
-      `site:quora.com "how do I" OR "where can I" "${keyword}"`,
-      `site:quora.com "recommend" "${keyword}" service`,
-    ];
-  }
-  if (platforms.includes('facebook')) {
-    queries.facebook = [
-      `site:facebook.com ("need help" OR "looking for") "${keyword}"`,
-      `site:facebook.com/groups "${keyword}" ("recommendations" OR "advice")`,
-    ];
-  }
-  
-  return queries;
 }
 
 // ============================================================
-// AI AGENT: Lead Qualifier  
-// Analyzes page content to determine if it's a real lead
+// APIFY GOOGLE SEARCH (Fallback)
+// ============================================================
+async function apifySearch(query, options = {}) {
+  if (!APIFY_TOKEN) {
+    console.log('No Apify token available');
+    return [];
+  }
+  
+  try {
+    const timeframeMap = {
+      'd': 'qdr:d',
+      'w': 'qdr:w', 
+      'm': 'qdr:m',
+      'y': 'qdr:y'
+    };
+    
+    console.log(`🔍 Apify Search: ${query.substring(0, 50)}...`);
+    
+    const response = await fetch(
+      `https://api.apify.com/v2/acts/apify~google-search-scraper/run-sync-get-dataset-items?token=${APIFY_TOKEN}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          queries: query + (options.timeframe ? ` &tbs=${timeframeMap[options.timeframe] || ''}` : ''),
+          maxPagesPerQuery: 1,
+          resultsPerPage: options.limit || 10,
+          countryCode: options.region || 'us',
+          languageCode: 'en'
+        })
+      }
+    );
+    
+    const data = await response.json();
+    const results = (data[0]?.organicResults || []).map(r => ({
+      title: r.title,
+      url: r.url,
+      snippet: r.description
+    }));
+    
+    console.log(`✅ Found ${results.length} results`);
+    return results;
+  } catch (err) {
+    console.log('Apify search error:', err.message);
+    return [];
+  }
+}
+
+// ============================================================
+// AI AGENT: Lead Qualifier (Gemini)
 // ============================================================
 async function qualifyLead(pageContent, url, keyword) {
   if (!GEMINI_API_KEY) {
@@ -154,8 +172,8 @@ REJECT (is_lead: false) IF:
 
 EXTRACT IF QUALIFIED:
 - Author name (who posted this)
-- Email (if visible)
-- Phone (if visible)  
+- Email (if visible in content)
+- Phone (if visible in content)  
 - Platform username (Reddit u/, Twitter @, etc.)
 - What they need (brief intent summary)
 - Intent score 1-10 (10 = ready to buy, 1 = just curious)
@@ -174,8 +192,25 @@ Respond with JSON only:
   "reason": "why qualified/rejected"
 }`;
 
-    const response = await callGemini(prompt);
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.1,
+            maxOutputTokens: 500
+          }
+        })
+      }
+    );
+    
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       return JSON.parse(jsonMatch[0]);
     }
@@ -206,12 +241,22 @@ function fallbackQualification(content, url) {
   const hasGood = goodPatterns.some(p => lower.includes(p));
   
   // Extract email
-  const emailMatch = content.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+  const emailMatch = content.match(/[a-zA-Z0-9._%+-]+@(gmail|yahoo|hotmail|outlook)\.[a-zA-Z]{2,}/i);
   const email = emailMatch ? emailMatch[0] : '';
   
-  // Extract Reddit username
-  const redditMatch = url.match(/reddit\.com\/u(?:ser)?\/([^\/\?]+)/);
-  const username = redditMatch ? `u/${redditMatch[1]}` : '';
+  // Extract phone
+  const phoneMatch = content.match(/(?:\+?1[-.\s]?)?\(?[2-9][0-9]{2}\)?[-.\s]?[2-9][0-9]{2}[-.\s]?[0-9]{4}/);
+  const phone = phoneMatch ? phoneMatch[0] : '';
+  
+  // Extract username
+  let username = '';
+  if (url.includes('reddit.com')) {
+    const match = content.match(/"author"\s*:\s*"([^"]+)"/);
+    if (match) username = `u/${match[1]}`;
+  } else if (url.includes('twitter.com') || url.includes('x.com')) {
+    const match = url.match(/(?:twitter\.com|x\.com)\/([^\/\?]+)/);
+    if (match) username = `@${match[1]}`;
+  }
   
   // Check for DM request
   const hasDmRequest = /\b(dm\s*me|message\s*me|pm\s*me)\b/i.test(content);
@@ -220,7 +265,7 @@ function fallbackQualification(content, url) {
     is_lead: hasGood && !hasBad,
     name: '',
     email: email,
-    phone: '',
+    phone: phone,
     username: username,
     intent: '',
     intent_score: hasGood ? 6 : 3,
@@ -230,110 +275,7 @@ function fallbackQualification(content, url) {
 }
 
 // ============================================================
-// GEMINI API CALL
-// ============================================================
-async function callGemini(prompt) {
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 500
-        }
-      })
-    }
-  );
-  
-  const data = await response.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-}
-
-// ============================================================
-// SERPER API (Google Search) - Free tier: 2500 searches
-// ============================================================
-async function searchWithSerper(query, options = {}) {
-  if (!SERPER_API_KEY) {
-    console.log('No Serper API key, falling back to Apify');
-    return searchWithApify(query, options);
-  }
-  
-  try {
-    const response = await fetch('https://google.serper.dev/search', {
-      method: 'POST',
-      headers: {
-        'X-API-KEY': SERPER_API_KEY,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        q: query,
-        gl: options.region || 'us',
-        num: options.limit || 10,
-        tbs: options.timeframe === 'd' ? 'qdr:d' : 
-             options.timeframe === 'w' ? 'qdr:w' : 
-             options.timeframe === 'm' ? 'qdr:m' : ''
-      })
-    });
-    
-    const data = await response.json();
-    return (data.organic || []).map(r => ({
-      title: r.title,
-      url: r.link,
-      snippet: r.snippet
-    }));
-  } catch (err) {
-    console.log('Serper error:', err.message);
-    return [];
-  }
-}
-
-// ============================================================
-// APIFY GOOGLE SEARCH (Fallback)
-// ============================================================
-async function searchWithApify(query, options = {}) {
-  if (!APIFY_TOKEN) return [];
-  
-  try {
-    const timeframeMap = {
-      'd': 'qdr:d',
-      'w': 'qdr:w', 
-      'm': 'qdr:m',
-      'y': 'qdr:y'
-    };
-    
-    const response = await fetch(
-      `https://api.apify.com/v2/acts/apify~google-search-scraper/run-sync-get-dataset-items?token=${APIFY_TOKEN}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          queries: query + (options.timeframe ? ` &tbs=${timeframeMap[options.timeframe] || ''}` : ''),
-          maxPagesPerQuery: 1,
-          resultsPerPage: options.limit || 10,
-          countryCode: options.region || 'us',
-          languageCode: 'en'
-        })
-      }
-    );
-    
-    const data = await response.json();
-    const results = data[0]?.organicResults || [];
-    return results.map(r => ({
-      title: r.title,
-      url: r.url,
-      snippet: r.description
-    }));
-  } catch (err) {
-    console.log('Apify search error:', err.message);
-    return [];
-  }
-}
-
-// ============================================================
-// PAGE SCRAPER - Fetches page content for AI analysis
+// PAGE SCRAPER
 // ============================================================
 async function fetchPageContent(url) {
   try {
@@ -360,7 +302,7 @@ async function fetchPageContent(url) {
     
     return { text, html };
   } catch (err) {
-    console.log('Fetch error for', url, ':', err.message);
+    console.log('Fetch error for', url.substring(0, 50), ':', err.message);
     return { text: '', html: '' };
   }
 }
@@ -375,36 +317,57 @@ function detectPlatform(url) {
   if (url.includes('facebook.com')) return 'Facebook';
   if (url.includes('quora.com')) return 'Quora';
   if (url.includes('instagram.com')) return 'Instagram';
+  if (url.includes('craigslist.org')) return 'Craigslist';
+  if (url.includes('upwork.com')) return 'Upwork';
   return 'Google';
 }
 
 // ============================================================
-// USERNAME EXTRACTOR
+// SEARCH QUERY GENERATOR
 // ============================================================
-function extractUsername(url, content) {
-  // Reddit
-  let match = url.match(/reddit\.com\/(?:u(?:ser)?|r\/\w+\/comments\/\w+\/\w+)/) ||
-              content.match(/(?:u\/|\/user\/)([a-zA-Z0-9_-]+)/);
-  if (url.includes('reddit.com')) {
-    const postAuthor = content.match(/"author"\s*:\s*"([^"]+)"/);
-    if (postAuthor) return `u/${postAuthor[1]}`;
-  }
+function generateSearchQueries(keyword, platform) {
+  const queries = {
+    google: [
+      `"I need" OR "looking for" "${keyword}" "@gmail.com" OR "@yahoo.com"`,
+      `"help me with" OR "recommend" "${keyword}" "my project" OR "my business"`,
+      `"hire" OR "seeking" "${keyword}" "contact" OR "email"`
+    ],
+    reddit: [
+      `site:reddit.com ("I need" OR "looking for") "${keyword}"`,
+      `site:reddit.com/r/forhire "${keyword}"`,
+      `site:reddit.com ("help me" OR "recommend") "${keyword}" -tutorial`
+    ],
+    linkedin: [
+      `site:linkedin.com/posts ("looking for" OR "need") "${keyword}"`,
+      `site:linkedin.com ("seeking" OR "hiring freelancer") "${keyword}"`
+    ],
+    twitter: [
+      `site:twitter.com OR site:x.com ("need" OR "looking for") "${keyword}"`,
+      `site:twitter.com ("help me" OR "anyone know") "${keyword}"`
+    ],
+    facebook: [
+      `site:facebook.com/groups ("need help" OR "looking for") "${keyword}"`,
+      `site:facebook.com ("recommendations" OR "advice") "${keyword}"`
+    ],
+    instagram: [
+      `site:instagram.com ("need" OR "looking for") "${keyword}"`,
+      `site:instagram.com ("dm me" OR "help") "${keyword}"`
+    ],
+    quora: [
+      `site:quora.com "how do I find" OR "where can I get" "${keyword}"`,
+      `site:quora.com "recommend" "${keyword}" service`
+    ],
+    craigslist: [
+      `site:craigslist.org ("need" OR "looking for") "${keyword}"`,
+      `site:craigslist.org/gig "${keyword}"`
+    ],
+    upwork: [
+      `site:upwork.com/job "${keyword}"`,
+      `site:upwork.com "${keyword}" budget`
+    ]
+  };
   
-  // Twitter
-  if (url.includes('twitter.com') || url.includes('x.com')) {
-    match = url.match(/(?:twitter\.com|x\.com)\/([^\/\?]+)/);
-    if (match && !['search', 'explore', 'home'].includes(match[1])) {
-      return `@${match[1]}`;
-    }
-  }
-  
-  // LinkedIn
-  if (url.includes('linkedin.com/in/')) {
-    match = url.match(/linkedin\.com\/in\/([^\/\?]+)/);
-    if (match) return match[1];
-  }
-  
-  return '';
+  return queries[platform] || queries.google;
 }
 
 // ============================================================
@@ -415,7 +378,7 @@ let allLeads = [];
 app.post('/api/extract', async (req, res) => {
   const { keywords, platforms, maxResults = 10, region = 'us', timeframe = 'd' } = req.body;
   
-  console.log('🤖 AI Agent starting extraction:', { keywords, platforms, maxResults });
+  console.log('\n🤖 AI Agent starting extraction:', { keywords, platforms, maxResults });
   
   const results = [];
   const seenUrls = new Set();
@@ -429,32 +392,29 @@ app.post('/api/extract', async (req, res) => {
 
   try {
     for (const keyword of keywords) {
-      console.log(`\n📍 Processing keyword: ${keyword}`);
+      console.log(`\n📍 Processing keyword: "${keyword}"`);
       
-      // Step 1: AI Plans search queries
-      console.log('🧠 Planning search queries...');
-      const queries = await planSearchQueries(keyword, platforms);
-      
-      // Step 2: Execute searches across platforms
       for (const platform of platforms) {
-        const platformQueries = queries[platform] || [];
+        if (results.length >= maxResults) break;
         
-        for (const query of platformQueries.slice(0, 2)) { // Limit queries per platform
+        const queries = generateSearchQueries(keyword, platform);
+        
+        for (const query of queries.slice(0, 2)) {
           if (results.length >= maxResults) break;
           
-          console.log(`🔍 Searching ${platform}: ${query.substring(0, 50)}...`);
           stats.searched++;
           
-          const searchResults = await searchWithSerper(query, {
+          // Use Bright Data or fallback to Apify
+          const searchResults = await brightDataSearch(query, {
             region,
             timeframe,
             limit: Math.min(maxResults * 2, 15)
           });
           
-          // Step 3: Analyze each result
+          // Analyze each result
           for (const result of searchResults) {
             if (results.length >= maxResults) break;
-            if (seenUrls.has(result.url)) continue;
+            if (!result.url || seenUrls.has(result.url)) continue;
             seenUrls.add(result.url);
             
             console.log(`📄 Analyzing: ${result.url.substring(0, 60)}...`);
@@ -464,26 +424,25 @@ app.post('/api/extract', async (req, res) => {
             const { text, html } = await fetchPageContent(result.url);
             if (!text || text.length < 100) continue;
             
-            // Step 4: AI qualifies the lead
+            // AI qualifies the lead
             const qualification = await qualifyLead(text, result.url, keyword);
             
             if (qualification.is_lead && qualification.intent_score >= 5) {
               stats.qualified++;
               
-              const platform = detectPlatform(result.url);
-              const username = qualification.username || extractUsername(result.url, html);
+              const detectedPlatform = detectPlatform(result.url);
               
               const lead = {
-                name: qualification.name || username || 'Unknown',
-                email: qualification.email || (qualification.contact_method === 'dm' ? `(DM on ${platform})` : ''),
+                name: qualification.name || qualification.username || 'Unknown',
+                email: qualification.email || (qualification.contact_method === 'dm' ? `(DM on ${detectedPlatform})` : ''),
                 phone: qualification.phone || '',
-                source: platform,
+                source: detectedPlatform,
                 query: keyword,
                 intent: qualification.intent || result.snippet?.substring(0, 100) || '',
                 intentScore: qualification.intent_score,
                 title: result.title,
                 url: result.url,
-                username: username,
+                username: qualification.username || '',
                 contactMethod: qualification.contact_method,
                 extractedAt: new Date().toISOString()
               };
@@ -491,14 +450,14 @@ app.post('/api/extract', async (req, res) => {
               // Track stats
               if (qualification.email && qualification.email.includes('@')) {
                 stats.emailLeads++;
-              } else {
+              } else if (qualification.contact_method === 'dm') {
                 stats.dmLeads++;
               }
               
               results.push(lead);
-              console.log(`✅ Qualified lead: ${lead.name} (${lead.contactMethod})`);
+              console.log(`✅ Lead #${results.length}: ${lead.name} (${lead.contactMethod}) - Intent: ${lead.intentScore}/10`);
             } else {
-              console.log(`❌ Rejected: ${qualification.reason || 'Low intent score'}`);
+              console.log(`❌ Rejected: ${qualification.reason || 'Low intent'}`);
             }
           }
         }
@@ -510,7 +469,10 @@ app.post('/api/extract', async (req, res) => {
     
     allLeads = results;
     
-    console.log(`\n🎯 Extraction complete: ${results.length} leads found`);
+    console.log(`\n🎯 Extraction complete!`);
+    console.log(`   📊 Searched: ${stats.searched} queries`);
+    console.log(`   📄 Analyzed: ${stats.analyzed} pages`);
+    console.log(`   ✅ Qualified: ${stats.qualified} leads`);
     console.log(`   📧 Email leads: ${stats.emailLeads}`);
     console.log(`   💬 DM leads: ${stats.dmLeads}`);
 
@@ -535,31 +497,17 @@ app.post('/api/extract', async (req, res) => {
 // API: Status
 // ============================================================
 app.get('/api/status', async (req, res) => {
-  try {
-    const status = {
-      gemini: !!GEMINI_API_KEY,
-      serper: !!SERPER_API_KEY,
-      apify: !!APIFY_TOKEN
-    };
-    
-    // Test Gemini connection
-    if (GEMINI_API_KEY) {
-      try {
-        await callGemini('Say "OK"');
-        status.geminiConnected = true;
-      } catch {
-        status.geminiConnected = false;
-      }
-    }
-    
-    res.json({ 
-      connected: status.gemini || status.apify,
-      apis: status,
-      agent: 'LeadGen AI Agent v2.0'
-    });
-  } catch (err) {
-    res.json({ connected: false, error: err.message });
-  }
+  const status = {
+    brightData: !!BRIGHT_DATA_API_KEY,
+    apify: !!APIFY_TOKEN,
+    gemini: !!GEMINI_API_KEY
+  };
+  
+  res.json({ 
+    connected: status.brightData || status.apify,
+    apis: status,
+    agent: 'LeadGen Pro AI Agent v2.1 (Bright Data)'
+  });
 });
 
 // ============================================================
@@ -601,10 +549,10 @@ app.get('/api/export', (req, res) => {
 // ============================================================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🚀 LeadGen AI Agent running on port ${PORT}`);
-  console.log(`   Gemini: ${GEMINI_API_KEY ? '✅' : '❌'}`);
-  console.log(`   Serper: ${SERPER_API_KEY ? '✅' : '❌'}`);
+  console.log(`\n🚀 LeadGen Pro AI Agent v2.1 running on port ${PORT}`);
+  console.log(`   Bright Data: ${BRIGHT_DATA_API_KEY ? '✅' : '❌'}`);
   console.log(`   Apify: ${APIFY_TOKEN ? '✅' : '❌'}`);
+  console.log(`   Gemini: ${GEMINI_API_KEY ? '✅' : '❌'}\n`);
 });
 
 module.exports = app;
