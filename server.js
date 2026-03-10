@@ -387,21 +387,20 @@ app.post('/api/extract', async (req, res) => {
   console.log('\n🤖 AI Agent starting extraction:', { keywords, platforms, maxResults });
   
   const results = [];
-  const extraLeads = []; // Cache for extra qualified leads
   const seenUrls = new Set();
   const stats = {
     searched: 0,
     analyzed: 0,
     qualified: 0,
-    emailLeads: 0,
-    dmLeads: 0
+    loops: 0,
+    maxLoops: 10 // Safety limit
   };
   
   // Check cache first for matching keywords
   for (const keyword of keywords) {
     const cacheKey = keyword.toLowerCase().trim();
     if (cachedLeads[cacheKey] && cachedLeads[cacheKey].length > 0) {
-      const cached = cachedLeads[cacheKey].splice(0, maxResults);
+      const cached = cachedLeads[cacheKey].splice(0, maxResults - results.length);
       results.push(...cached);
       console.log(`📦 Retrieved ${cached.length} leads from cache for "${keyword}"`);
     }
@@ -413,8 +412,8 @@ app.post('/api/extract', async (req, res) => {
     return res.json({
       success: true,
       requested: maxResults,
-      found: allLeads.filter(l => l.contactMethod === 'email').length,
-      dmLeads: allLeads.filter(l => l.contactMethod === 'dm').length,
+      found: allLeads.length,
+      cached: 0,
       notAvailable: 0,
       stats: { ...stats, qualified: allLeads.length, fromCache: true },
       leads: allLeads
@@ -422,98 +421,116 @@ app.post('/api/extract', async (req, res) => {
   }
 
   try {
-    // Calculate how many results to search for (search 20x more to find qualified leads with emails)
-    const searchMultiplier = 20;
-    const targetSearchResults = maxResults * searchMultiplier;
+    // LOOP until we find enough leads or hit max iterations
+    let queryOffset = 0; // Track which queries we've used
     
-    for (const keyword of keywords) {
-      console.log(`\n📍 Processing keyword: "${keyword}"`);
+    while (results.length < maxResults && stats.loops < stats.maxLoops) {
+      stats.loops++;
+      console.log(`\n🔄 Search loop ${stats.loops}/${stats.maxLoops} - Found ${results.length}/${maxResults} leads`);
       
-      for (const platform of platforms) {
-        // Don't stop early - search all platforms to gather more leads
-        const queries = generateSearchQueries(keyword, platform);
+      for (const keyword of keywords) {
+        if (results.length >= maxResults) break;
+        console.log(`\n📍 Processing keyword: "${keyword}"`);
         
-        // Use more queries per platform (up to 5)
-        for (const query of queries.slice(0, 5)) {
-          stats.searched++;
+        for (const platform of platforms) {
+          if (results.length >= maxResults) break;
           
-          // Search for more results per query
-          const searchResults = await brightDataSearch(query, {
-            region,
-            timeframe,
-            limit: 20 // Get 20 results per query
-          });
+          const queries = generateSearchQueries(keyword, platform);
           
-          // Analyze each result - DON'T stop early, collect all qualified leads
-          for (const result of searchResults) {
-            if (!result.url || seenUrls.has(result.url)) continue;
-            seenUrls.add(result.url);
+          // Pick different queries each loop iteration
+          const startIdx = (queryOffset % queries.length);
+          const queriesToUse = [...queries.slice(startIdx), ...queries.slice(0, startIdx)].slice(0, 3);
+          
+          for (const query of queriesToUse) {
+            if (results.length >= maxResults) break;
             
-            // Limit total analysis to avoid timeout (max 100 pages)
-            if (stats.analyzed >= 100) continue;
+            stats.searched++;
             
-            console.log(`📄 Analyzing: ${result.url.substring(0, 60)}...`);
-            stats.analyzed++;
+            // Vary the number of results based on loop iteration
+            const resultsPerQuery = 15 + (stats.loops * 5); // More results in later loops
             
-            // Fetch page content
-            const { text, html } = await fetchPageContent(result.url);
-            if (!text || text.length < 100) continue;
-            
-            // AI qualifies the lead
-            const qualification = await qualifyLead(text, result.url, keyword);
-            
-            if (qualification.is_lead && qualification.intent_score >= 5) {
-              const detectedPlatform = detectPlatform(result.url);
+            const searchResults = await brightDataSearch(query, {
+              region,
+              timeframe,
+              limit: Math.min(resultsPerQuery, 50)
+            });
+          
+            // Analyze each result
+            for (const result of searchResults) {
+              if (results.length >= maxResults) break;
+              if (!result.url || seenUrls.has(result.url)) continue;
+              seenUrls.add(result.url);
               
-              // Validate email is real and present
-              const hasRealEmail = qualification.email && 
-                                   qualification.email.includes('@') && 
-                                   qualification.email.length > 5 &&
-                                   !qualification.email.includes('example') &&
-                                   !qualification.email.includes('test@') &&
-                                   !qualification.email.includes('fake') &&
-                                   /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(qualification.email);
+              // Limit total analysis per loop to avoid timeout
+              if (stats.analyzed >= 50 * stats.loops) continue;
               
-              // ONLY accept leads with REAL EMAIL (as per requirement)
-              // No DM leads - email is required
+              console.log(`📄 Analyzing: ${result.url.substring(0, 60)}...`);
+              stats.analyzed++;
               
-              // Validate name is present
-              const hasName = qualification.name && 
-                              qualification.name.length > 1 && 
-                              qualification.name !== 'Unknown' &&
-                              qualification.name !== '-';
+              // Fetch page content
+              const { text, html } = await fetchPageContent(result.url);
+              if (!text || text.length < 100) continue;
               
-              // Only include if has real email
-              if (hasRealEmail) {
-                stats.qualified++;
-                stats.emailLeads++;
+              // AI qualifies the lead
+              const qualification = await qualifyLead(text, result.url, keyword);
+              
+              if (qualification.is_lead && qualification.intent_score >= 5) {
+                const detectedPlatform = detectPlatform(result.url);
                 
-                const lead = {
-                  name: hasName ? qualification.name : (qualification.username || '-'),
-                  email: qualification.email,
-                  phone: qualification.phone && qualification.phone !== '' ? qualification.phone : '-',
-                  source: detectedPlatform,
-                  query: keyword,
-                  intent: qualification.intent || result.snippet?.substring(0, 100) || '',
-                  intentScore: qualification.intent_score,
-                  title: result.title,
-                  url: result.url,
-                  username: qualification.username || '',
-                  contactMethod: 'email',
-                  emailVerified: true,
-                  extractedAt: new Date().toISOString()
-                };
+                // Validate email is real and present
+                const hasRealEmail = qualification.email && 
+                                     qualification.email.includes('@') && 
+                                     qualification.email.length > 5 &&
+                                     !qualification.email.includes('example') &&
+                                     !qualification.email.includes('test@') &&
+                                     !qualification.email.includes('fake') &&
+                                     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(qualification.email);
                 
-                results.push(lead);
-                console.log(`✅ Lead #${results.length}: ${lead.name} | ${lead.email} | ${lead.phone} | Intent: ${lead.intentScore}/10`);
+                // Validate name is present
+                const hasName = qualification.name && 
+                                qualification.name.length > 1 && 
+                                qualification.name !== 'Unknown' &&
+                                qualification.name !== '-';
+                
+                // Only include if has real email
+                if (hasRealEmail) {
+                  stats.qualified++;
+                  
+                  const lead = {
+                    name: hasName ? qualification.name : (qualification.username || '-'),
+                    email: qualification.email,
+                    phone: qualification.phone && qualification.phone !== '' ? qualification.phone : '-',
+                    source: detectedPlatform,
+                    query: keyword,
+                    intent: qualification.intent || result.snippet?.substring(0, 100) || '',
+                    intentScore: qualification.intent_score,
+                    title: result.title,
+                    url: result.url,
+                    username: qualification.username || '',
+                    contactMethod: 'email',
+                    emailVerified: true,
+                    extractedAt: new Date().toISOString()
+                  };
+                  
+                  results.push(lead);
+                  console.log(`✅ Lead #${results.length}/${maxResults}: ${lead.name} | ${lead.email} | Intent: ${lead.intentScore}/10`);
+                } else {
+                  console.log(`⚠️ Skipped: No real email found`);
+                }
               } else {
-                console.log(`⚠️ Skipped: No real email found (email required)`);
+                console.log(`❌ Rejected: ${qualification.reason || 'Not seeking services'}`);
               }
-            } else {
-              console.log(`❌ Rejected: ${qualification.reason || 'Low intent or not seeking services'}`);
             }
           }
         }
+      }
+      
+      // Increase query offset for next loop iteration to try different queries
+      queryOffset++;
+      
+      // Log progress
+      if (results.length < maxResults) {
+        console.log(`\n⏳ Need ${maxResults - results.length} more leads, continuing search...`);
       }
     }
 
@@ -537,10 +554,10 @@ app.post('/api/extract', async (req, res) => {
     allLeads = toReturn;
     
     console.log(`\n🎯 Extraction complete!`);
+    console.log(`   🔄 Loops: ${stats.loops}`);
     console.log(`   📊 Searched: ${stats.searched} queries`);
     console.log(`   📄 Analyzed: ${stats.analyzed} pages`);
     console.log(`   ✅ Qualified: ${stats.qualified} leads (${toReturn.length} returned, ${toCache.length} cached)`);
-    console.log(`   📧 Email leads: ${stats.emailLeads}`);
 
     res.json({
       success: true,
@@ -549,6 +566,7 @@ app.post('/api/extract', async (req, res) => {
       cached: toCache.length,
       notAvailable: Math.max(0, maxResults - toReturn.length),
       stats: {
+        loops: stats.loops,
         searched: stats.searched,
         analyzed: stats.analyzed,
         qualified: stats.qualified,
@@ -556,7 +574,9 @@ app.post('/api/extract', async (req, res) => {
         cached: toCache.length
       },
       leads: toReturn,
-      message: toReturn.length === 0 ? 'No leads with verified emails found. People rarely post emails publicly - try more platforms or different keywords.' : ''
+      message: toReturn.length < maxResults 
+        ? `Found ${toReturn.length}/${maxResults} leads with verified emails after ${stats.loops} search loops. Public emails are rare.` 
+        : ''
     });
 
   } catch (err) {
