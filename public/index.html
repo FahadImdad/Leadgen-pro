@@ -978,31 +978,61 @@ web development</textarea>
       // Show loading
       document.getElementById('loadingOverlay').classList.remove('hidden');
       document.getElementById('extractBtn').disabled = true;
-      document.getElementById('loadingText').textContent = 'Connecting to platforms...';
-      document.getElementById('loadingProgress').textContent = '';
+      document.getElementById('loadingText').textContent = '🔍 Starting search...';
+      document.getElementById('loadingProgress').textContent = '0/' + maxResults + ' leads';
       
       try {
-        let progress = 0;
-        const totalSteps = keywords.length * platforms.length;
-        
-        const res = await fetch('/api/extract', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ keywords, platforms, maxResults, region, timeframe })
+        // Use Server-Sent Events for real-time progress
+        const params = new URLSearchParams({
+          keywords: keywords.join(','),
+          platforms: platforms.join(','),
+          maxResults,
+          region,
+          timeframe
         });
         
-        const data = await res.json();
+        const eventSource = new EventSource('/api/extract-stream?' + params.toString());
         
-        if (data.success) {
-          allLeads = data.leads;
-          displayResults(data.leads);
-          updateStats(data);
-        } else {
-          alert('Error: ' + data.error);
-        }
+        eventSource.onmessage = (event) => {
+          const data = JSON.parse(event.data);
+          
+          if (data.type === 'progress') {
+            document.getElementById('loadingText').textContent = data.message;
+            document.getElementById('loadingProgress').textContent = `${data.found}/${data.total} leads found`;
+          }
+          
+          if (data.type === 'lead') {
+            document.getElementById('loadingText').textContent = `✅ Found lead: ${data.lead.name}`;
+            document.getElementById('loadingProgress').textContent = `${data.found}/${data.total} leads found`;
+            // Update results count live
+            document.getElementById('resultsCount').textContent = data.found;
+          }
+          
+          if (data.type === 'complete') {
+            eventSource.close();
+            allLeads = data.leads;
+            displayResults(data.leads);
+            updateStats({ success: true, ...data.stats, leads: data.leads });
+            document.getElementById('loadingOverlay').classList.add('hidden');
+            document.getElementById('extractBtn').disabled = false;
+          }
+          
+          if (data.type === 'error') {
+            eventSource.close();
+            alert('Error: ' + data.error);
+            document.getElementById('loadingOverlay').classList.add('hidden');
+            document.getElementById('extractBtn').disabled = false;
+          }
+        };
+        
+        eventSource.onerror = () => {
+          eventSource.close();
+          document.getElementById('loadingOverlay').classList.add('hidden');
+          document.getElementById('extractBtn').disabled = false;
+        };
+        
       } catch (err) {
         alert('Error: ' + err.message);
-      } finally {
         document.getElementById('loadingOverlay').classList.add('hidden');
         document.getElementById('extractBtn').disabled = false;
       }

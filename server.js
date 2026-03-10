@@ -381,6 +381,125 @@ function generateSearchQueries(keyword, platform) {
 let allLeads = [];
 let cachedLeads = {}; // Cache extra leads by keyword for future requests
 
+// SSE endpoint for real-time extraction with progress
+app.get('/api/extract-stream', async (req, res) => {
+  const { keywords, platforms, maxResults = 10, region = 'us', timeframe = 'd' } = req.query;
+  
+  // Parse arrays from query string
+  const keywordList = keywords ? keywords.split(',') : [];
+  const platformList = platforms ? platforms.split(',') : [];
+  const max = parseInt(maxResults);
+  
+  // Set up SSE
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  
+  const sendProgress = (found, total, message) => {
+    res.write(`data: ${JSON.stringify({ type: 'progress', found, total, message })}\n\n`);
+  };
+  
+  const sendLead = (lead, found, total) => {
+    res.write(`data: ${JSON.stringify({ type: 'lead', lead, found, total })}\n\n`);
+  };
+  
+  const sendComplete = (leads, stats) => {
+    res.write(`data: ${JSON.stringify({ type: 'complete', leads, stats })}\n\n`);
+    res.end();
+  };
+  
+  const sendError = (error) => {
+    res.write(`data: ${JSON.stringify({ type: 'error', error })}\n\n`);
+    res.end();
+  };
+
+  try {
+    const results = [];
+    const seenUrls = new Set();
+    const stats = { searched: 0, analyzed: 0, qualified: 0, loops: 0 };
+    let queryOffset = 0;
+    
+    sendProgress(0, max, 'Starting search...');
+    
+    while (results.length < max && stats.loops < 10) {
+      stats.loops++;
+      sendProgress(results.length, max, `Search loop ${stats.loops}/10...`);
+      
+      for (const keyword of keywordList) {
+        if (results.length >= max) break;
+        
+        for (const platform of platformList) {
+          if (results.length >= max) break;
+          
+          const queries = generateSearchQueries(keyword, platform);
+          const startIdx = (queryOffset % queries.length);
+          const queriesToUse = [...queries.slice(startIdx), ...queries.slice(0, startIdx)].slice(0, 3);
+          
+          for (const query of queriesToUse) {
+            if (results.length >= max) break;
+            
+            stats.searched++;
+            sendProgress(results.length, max, `Searching ${platform}...`);
+            
+            const searchResults = await brightDataSearch(query, { region, timeframe, limit: 20 });
+            
+            for (const result of searchResults) {
+              if (results.length >= max) break;
+              if (!result.url || seenUrls.has(result.url)) continue;
+              seenUrls.add(result.url);
+              
+              if (stats.analyzed >= 50 * stats.loops) continue;
+              stats.analyzed++;
+              
+              sendProgress(results.length, max, `Analyzing page ${stats.analyzed}...`);
+              
+              const { text } = await fetchPageContent(result.url);
+              if (!text || text.length < 100) continue;
+              
+              const qualification = await qualifyLead(text, result.url, keyword);
+              
+              if (qualification.is_lead && qualification.intent_score >= 5) {
+                const detectedPlatform = detectPlatform(result.url);
+                const hasRealEmail = qualification.email && 
+                  qualification.email.includes('@') && 
+                  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(qualification.email);
+                const isDmLead = !hasRealEmail && qualification.username;
+                
+                if (hasRealEmail || isDmLead) {
+                  stats.qualified++;
+                  
+                  const lead = {
+                    name: qualification.name || qualification.username || '-',
+                    email: hasRealEmail ? qualification.email : 'With DM Me',
+                    phone: qualification.phone || '-',
+                    source: detectedPlatform,
+                    query: keyword,
+                    intent: qualification.intent || '',
+                    intentScore: qualification.intent_score,
+                    url: result.url,
+                    username: qualification.username || '',
+                    contactMethod: hasRealEmail ? 'email' : 'dm'
+                  };
+                  
+                  results.push(lead);
+                  sendLead(lead, results.length, max);
+                }
+              }
+            }
+          }
+        }
+      }
+      queryOffset++;
+    }
+    
+    allLeads = results;
+    sendComplete(results, stats);
+    
+  } catch (err) {
+    sendError(err.message);
+  }
+});
+
 app.post('/api/extract', async (req, res) => {
   const { keywords, platforms, maxResults = 10, region = 'us', timeframe = 'd' } = req.body;
   
