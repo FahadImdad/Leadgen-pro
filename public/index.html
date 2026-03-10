@@ -406,44 +406,53 @@
     .badge-upwork { background: #6fda4422; color: #4ade80; }
     .badge-fiverr { background: #1dbf7322; color: #34d399; }
     
-    /* Loading State */
+    /* Loading State - Compact floating card */
     .loading-overlay {
       position: fixed;
-      top: 0;
-      left: 260px;
-      right: 0;
-      bottom: 0;
-      background: rgba(15, 23, 42, 0.9);
+      bottom: 30px;
+      right: 30px;
+      background: var(--bg-card);
+      border: 1px solid var(--primary);
+      border-radius: 16px;
+      padding: 20px 30px;
       display: flex;
-      flex-direction: column;
       align-items: center;
-      justify-content: center;
+      gap: 20px;
       z-index: 100;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+      max-width: 350px;
     }
     
     .loading-spinner {
-      width: 60px;
-      height: 60px;
-      border: 4px solid var(--border);
+      width: 40px;
+      height: 40px;
+      border: 3px solid var(--border);
       border-top-color: var(--primary);
       border-radius: 50%;
       animation: spin 1s linear infinite;
-      margin-bottom: 20px;
+      flex-shrink: 0;
     }
     
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
     
+    .loading-content {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    
     .loading-text {
-      font-size: 1.1rem;
-      color: var(--text-muted);
+      font-size: 0.95rem;
+      color: var(--text);
+      font-weight: 500;
     }
     
     .loading-progress {
-      margin-top: 15px;
-      font-size: 0.9rem;
+      font-size: 1.1rem;
       color: var(--primary);
+      font-weight: 700;
     }
     
     .hidden { display: none !important; }
@@ -579,11 +588,11 @@
       }
       
       .loading-overlay {
-        padding: 20px;
-      }
-      
-      .loading-text {
-        font-size: 1rem;
+        bottom: 15px;
+        right: 15px;
+        left: 15px;
+        max-width: none;
+        padding: 15px 20px;
       }
       
       /* Mobile API status - show at top */
@@ -865,8 +874,10 @@ web development</textarea>
   <!-- Loading Overlay -->
   <div class="loading-overlay hidden" id="loadingOverlay">
     <div class="loading-spinner"></div>
-    <div class="loading-text" id="loadingText">Initializing extraction...</div>
-    <div class="loading-progress" id="loadingProgress"></div>
+    <div class="loading-content">
+      <div class="loading-progress" id="loadingProgress">0/5 leads</div>
+      <div class="loading-text" id="loadingText">Starting search...</div>
+    </div>
   </div>
   
   <script>
