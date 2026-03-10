@@ -272,7 +272,7 @@ function fallbackQualification(content, url) {
 async function fetchPageContent(url) {
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
+    const timeout = setTimeout(() => controller.abort(), 5000);
     
     const response = await fetch(url, {
       headers: {
@@ -421,9 +421,9 @@ app.get('/api/extract-stream', async (req, res) => {
     
     sendProgress(0, max, 'Starting search...');
     
-    while (results.length < max && stats.loops < 10) {
+    while (results.length < max && stats.loops < 3) {
       stats.loops++;
-      sendProgress(results.length, max, `Search loop ${stats.loops}/10...`);
+      sendProgress(results.length, max, `Search loop ${stats.loops}/3...`);
       
       for (const keyword of keywordList) {
         if (results.length >= max) break;
@@ -433,7 +433,7 @@ app.get('/api/extract-stream', async (req, res) => {
           
           const queries = generateSearchQueries(keyword, platform);
           const startIdx = (queryOffset % queries.length);
-          const queriesToUse = [...queries.slice(startIdx), ...queries.slice(0, startIdx)].slice(0, 3);
+          const queriesToUse = [...queries.slice(startIdx), ...queries.slice(0, startIdx)].slice(0, 1);
           
           for (const query of queriesToUse) {
             if (results.length >= max) break;
@@ -446,7 +446,7 @@ app.get('/api/extract-stream', async (req, res) => {
             sendProgress(results.length, max, `📝 Query: "${shortQuery}"`);
             sendProgress(results.length, max, `🌍 Region: ${region.toUpperCase()} | Timeframe: ${timeframe}`);
             
-            const searchResults = await brightDataSearch(query, { region, timeframe, limit: 20 });
+            const searchResults = await brightDataSearch(query, { region, timeframe, limit: 10 });
             
             // Show what Bright Data returned
             sendProgress(results.length, max, `✅ BRIGHT DATA: Returned ${searchResults.length} results`);
@@ -467,7 +467,7 @@ app.get('/api/extract-stream', async (req, res) => {
               if (!result.url || seenUrls.has(result.url)) continue;
               seenUrls.add(result.url);
               
-              if (stats.analyzed >= 50 * stats.loops) continue;
+              if (stats.analyzed >= 15 * stats.loops) continue;
               stats.analyzed++;
               
               // Show what page we're analyzing
@@ -627,7 +627,7 @@ app.post('/api/extract', async (req, res) => {
               seenUrls.add(result.url);
               
               // Limit total analysis per loop to avoid timeout
-              if (stats.analyzed >= 50 * stats.loops) continue;
+              if (stats.analyzed >= 15 * stats.loops) continue;
               
               console.log(`📄 Analyzing: ${result.url.substring(0, 60)}...`);
               stats.analyzed++;
