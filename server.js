@@ -439,11 +439,28 @@ app.get('/api/extract-stream', async (req, res) => {
             if (results.length >= max) break;
             
             stats.searched++;
-            sendProgress(results.length, max, `🔍 Searching ${platform.charAt(0).toUpperCase() + platform.slice(1)} for "${keyword}"...`);
+            
+            // Show the actual query being sent to Bright Data
+            const shortQuery = query.length > 60 ? query.substring(0, 60) + '...' : query;
+            sendProgress(results.length, max, `⚡ BRIGHT DATA API: Sending search query...`);
+            sendProgress(results.length, max, `📝 Query: "${shortQuery}"`);
+            sendProgress(results.length, max, `🌍 Region: ${region.toUpperCase()} | Timeframe: ${timeframe}`);
             
             const searchResults = await brightDataSearch(query, { region, timeframe, limit: 20 });
             
-            sendProgress(results.length, max, `📄 Found ${searchResults.length} results on ${platform.charAt(0).toUpperCase() + platform.slice(1)}`);
+            // Show what Bright Data returned
+            sendProgress(results.length, max, `✅ BRIGHT DATA: Returned ${searchResults.length} results`);
+            
+            // List the URLs found
+            if (searchResults.length > 0) {
+              searchResults.slice(0, 3).forEach((r, i) => {
+                const shortUrl = (r.url || '').replace(/https?:\/\/(www\.)?/, '').substring(0, 50);
+                sendProgress(results.length, max, `   ${i+1}. ${shortUrl}...`);
+              });
+              if (searchResults.length > 3) {
+                sendProgress(results.length, max, `   ... and ${searchResults.length - 3} more URLs`);
+              }
+            }
             
             for (const result of searchResults) {
               if (results.length >= max) break;
@@ -463,13 +480,28 @@ app.get('/api/extract-stream', async (req, res) => {
                 continue;
               }
               
-              sendProgress(results.length, max, `🤖 AI Agent: Checking if post is someone seeking "${keyword}" services...`);
+              // Show page content preview
+              const contentPreview = text.substring(0, 100).replace(/\s+/g, ' ').trim();
+              sendProgress(results.length, max, `📄 Page content: "${contentPreview}..."`);
+              
+              sendProgress(results.length, max, `🤖 AI AGENT: Analyzing with Gemini AI...`);
+              sendProgress(results.length, max, `   → Checking if this is someone seeking "${keyword}" services`);
+              sendProgress(results.length, max, `   → Looking for contact info (email, phone, username)`);
+              
               const qualification = await qualifyLead(text, result.url, keyword);
               
+              // Show AI decision
+              sendProgress(results.length, max, `🤖 AI DECISION:`);
+              sendProgress(results.length, max, `   → Is Lead: ${qualification.is_lead ? 'YES ✅' : 'NO ❌'}`);
+              sendProgress(results.length, max, `   → Intent Score: ${qualification.intent_score}/10`);
+              if (qualification.email) sendProgress(results.length, max, `   → Email Found: ${qualification.email}`);
+              if (qualification.username) sendProgress(results.length, max, `   → Username: ${qualification.username}`);
+              if (qualification.reason) sendProgress(results.length, max, `   → Reason: ${qualification.reason}`);
+              
               if (!qualification.is_lead) {
-                sendProgress(results.length, max, `❌ Rejected: ${qualification.reason || 'Not a potential customer'}`);
+                sendProgress(results.length, max, `❌ SKIPPED: Not a potential customer`);
               } else if (qualification.intent_score < 5) {
-                sendProgress(results.length, max, `⚠️ Low intent (${qualification.intent_score}/10): Skipping`);
+                sendProgress(results.length, max, `⚠️ SKIPPED: Low intent score (${qualification.intent_score}/10)`);
               }
               
               if (qualification.is_lead && qualification.intent_score >= 5) {
