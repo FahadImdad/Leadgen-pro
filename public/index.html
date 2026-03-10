@@ -2,15 +2,14 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LeadGen Pro - AI Lead Extraction System</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>LeadGen Pro - AI Lead Extraction</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     
     :root {
       --primary: #6366f1;
-      --primary-dark: #4f46e5;
       --success: #10b981;
       --warning: #f59e0b;
       --danger: #ef4444;
@@ -23,18 +22,66 @@
     }
     
     body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-family: 'Inter', -apple-system, sans-serif;
       background: var(--bg-dark);
       color: var(--text);
       min-height: 100vh;
+      overflow-x: hidden;
     }
     
-    /* Sidebar */
+    /* Mobile Header */
+    .mobile-header {
+      display: none;
+      padding: 15px;
+      background: var(--bg-card);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    
+    .mobile-header-content {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    
+    .mobile-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .mobile-logo-icon {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, var(--primary), #8b5cf6);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+    }
+    
+    .mobile-logo-text {
+      font-weight: 700;
+      font-size: 1rem;
+    }
+    
+    .mobile-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+    
+    /* Sidebar - Desktop Only */
     .sidebar {
       position: fixed;
       left: 0;
       top: 0;
-      width: 260px;
+      width: 240px;
       height: 100vh;
       background: var(--bg-card);
       border-right: 1px solid var(--border);
@@ -47,26 +94,23 @@
       display: flex;
       align-items: center;
       gap: 12px;
-      padding-bottom: 25px;
+      padding-bottom: 20px;
       border-bottom: 1px solid var(--border);
-      margin-bottom: 25px;
+      margin-bottom: 20px;
     }
     
     .logo-icon {
-      width: 40px;
-      height: 40px;
+      width: 38px;
+      height: 38px;
       background: linear-gradient(135deg, var(--primary), #8b5cf6);
       border-radius: 10px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.4rem;
+      font-size: 1.2rem;
     }
     
-    .logo-text {
-      font-weight: 700;
-      font-size: 1.3rem;
-    }
+    .logo-text { font-weight: 700; font-size: 1.2rem; }
     
     .nav-item {
       display: flex;
@@ -77,7 +121,6 @@
       color: var(--text-muted);
       text-decoration: none;
       margin-bottom: 5px;
-      transition: all 0.2s;
       cursor: pointer;
     }
     
@@ -93,22 +136,23 @@
     
     .sidebar-footer {
       margin-top: auto;
-      padding-top: 20px;
+      padding-top: 15px;
       border-top: 1px solid var(--border);
     }
     
     .status-card {
       background: var(--bg-input);
-      padding: 15px;
-      border-radius: 10px;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 0.85rem;
     }
     
     .status-dot {
-      width: 10px;
-      height: 10px;
+      width: 8px;
+      height: 8px;
       border-radius: 50%;
       display: inline-block;
-      margin-right: 8px;
+      margin-right: 6px;
     }
     
     .status-dot.online { background: var(--success); }
@@ -116,33 +160,40 @@
     
     /* Main Content */
     .main {
-      margin-left: 260px;
-      padding: 30px;
+      margin-left: 240px;
+      padding: 25px;
       min-height: 100vh;
     }
     
-    .header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 30px;
+    .page-header {
+      margin-bottom: 25px;
     }
     
-    .header h1 {
-      font-size: 1.8rem;
+    .page-header h1 {
+      font-size: 1.5rem;
       font-weight: 700;
+      margin-bottom: 5px;
     }
     
-    .header-stats {
-      display: flex;
-      gap: 20px;
+    .page-header p {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+    
+    /* Stats Row */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 15px;
+      margin-bottom: 25px;
     }
     
     .stat-card {
       background: var(--bg-card);
-      padding: 15px 25px;
+      padding: 15px;
       border-radius: 12px;
       border: 1px solid var(--border);
+      text-align: center;
     }
     
     .stat-value {
@@ -151,42 +202,43 @@
       color: var(--primary);
     }
     
+    .stat-value.success { color: var(--success); }
+    .stat-value.warning { color: var(--warning); }
+    .stat-value.danger { color: var(--danger); }
+    
     .stat-label {
-      font-size: 0.85rem;
+      font-size: 0.75rem;
       color: var(--text-muted);
+      margin-top: 2px;
     }
     
-    /* Extraction Form */
-    .extraction-panel {
+    /* Form Section */
+    .form-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 25px;
-      margin-bottom: 30px;
+      gap: 20px;
+      margin-bottom: 25px;
     }
     
     .card {
       background: var(--bg-card);
-      border-radius: 15px;
-      padding: 25px;
+      border-radius: 12px;
+      padding: 20px;
       border: 1px solid var(--border);
     }
     
     .card-title {
-      font-size: 1.1rem;
+      font-size: 1rem;
       font-weight: 600;
-      margin-bottom: 20px;
+      margin-bottom: 15px;
       display: flex;
       align-items: center;
-      gap: 10px;
-    }
-    
-    .form-group {
-      margin-bottom: 20px;
+      justify-content: space-between;
     }
     
     .form-label {
       display: block;
-      font-size: 0.9rem;
+      font-size: 0.85rem;
       font-weight: 500;
       margin-bottom: 8px;
       color: var(--text-muted);
@@ -194,50 +246,42 @@
     
     .form-input, .form-select {
       width: 100%;
-      padding: 12px 15px;
+      padding: 12px;
       background: var(--bg-input);
       border: 1px solid var(--border);
       border-radius: 8px;
       color: var(--text);
-      font-size: 0.95rem;
+      font-size: 0.9rem;
     }
     
     .form-input:focus, .form-select:focus {
       outline: none;
       border-color: var(--primary);
-      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
-    }
-    
-    .form-input::placeholder {
-      color: var(--text-muted);
-    }
-    
-    .form-select {
-      cursor: pointer;
     }
     
     textarea.form-input {
-      min-height: 100px;
+      min-height: 90px;
       resize: vertical;
     }
     
     /* Platform Grid */
     .platform-grid {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 10px;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
     }
     
     .platform-item {
       display: flex;
       align-items: center;
-      gap: 10px;
-      padding: 12px;
+      gap: 8px;
+      padding: 10px 12px;
       background: var(--bg-input);
       border: 2px solid transparent;
-      border-radius: 10px;
+      border-radius: 8px;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: all 0.15s;
+      font-size: 0.85rem;
     }
     
     .platform-item.selected {
@@ -245,44 +289,45 @@
       background: rgba(99, 102, 241, 0.15);
     }
     
-    .platform-item input {
-      display: none;
+    .platform-item input { display: none; }
+    .platform-icon { font-size: 1.1rem; }
+    .platform-status { margin-left: auto; color: var(--success); font-size: 0.8rem; }
+    
+    /* Select All Button */
+    .btn-link {
+      background: none;
+      border: none;
+      color: var(--primary);
+      font-size: 0.8rem;
+      cursor: pointer;
     }
     
-    .platform-icon {
-      font-size: 1.3rem;
-    }
-    
-    .platform-name {
-      font-size: 0.9rem;
-      font-weight: 500;
-    }
-    
-    .platform-status {
-      font-size: 0.7rem;
-      color: var(--success);
-      margin-left: auto;
-    }
-    
-    /* Filters Row */
-    .filters-row {
+    /* Filters */
+    .filters-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 15px;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 15px;
     }
     
     /* Buttons */
+    .btn-row {
+      display: flex;
+      gap: 12px;
+    }
+    
     .btn {
-      padding: 12px 25px;
+      padding: 12px 20px;
       border-radius: 8px;
-      font-size: 0.95rem;
+      font-size: 0.9rem;
       font-weight: 600;
       cursor: pointer;
       border: none;
-      transition: all 0.2s;
       display: inline-flex;
       align-items: center;
+      justify-content: center;
       gap: 8px;
+      flex: 1;
     }
     
     .btn-primary {
@@ -290,16 +335,7 @@
       color: white;
     }
     
-    .btn-primary:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 5px 20px rgba(99, 102, 241, 0.4);
-    }
-    
-    .btn-primary:disabled {
-      opacity: 0.6;
-      transform: none;
-      cursor: not-allowed;
-    }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
     
     .btn-secondary {
       background: var(--bg-input);
@@ -307,23 +343,14 @@
       border: 1px solid var(--border);
     }
     
-    .btn-secondary:hover {
-      background: var(--border);
-    }
+    .btn-success { background: var(--success); color: white; }
     
-    .btn-success {
-      background: var(--success);
-      color: white;
-    }
-    
-    .btn-lg {
-      padding: 15px 35px;
-      font-size: 1.05rem;
-    }
-    
-    /* Results Table */
-    .results-card {
-      grid-column: 1 / -1;
+    /* Results Section */
+    .results-section {
+      background: var(--bg-card);
+      border-radius: 12px;
+      padding: 20px;
+      border: 1px solid var(--border);
     }
     
     .results-header {
@@ -331,572 +358,460 @@
       justify-content: space-between;
       align-items: center;
       margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 10px;
     }
     
-    .results-count {
+    .results-title {
       font-size: 1.1rem;
       font-weight: 600;
     }
     
-    .results-count span {
-      color: var(--primary);
-    }
+    .results-title span { color: var(--primary); }
     
     .results-actions {
       display: flex;
-      gap: 10px;
+      gap: 8px;
     }
     
-    .table-container {
-      overflow-x: auto;
+    .results-actions .btn {
+      flex: none;
+      padding: 10px 16px;
+      font-size: 0.85rem;
+    }
+    
+    /* Empty State */
+    .empty-state {
+      text-align: center;
+      padding: 50px 20px;
+      color: var(--text-muted);
+    }
+    
+    .empty-icon { font-size: 3rem; margin-bottom: 15px; opacity: 0.5; }
+    
+    /* Loading State */
+    .loading-state {
+      padding: 20px;
+    }
+    
+    .loading-header {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+    
+    .loading-spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      flex-shrink: 0;
+    }
+    
+    @keyframes spin { to { transform: rotate(360deg); } }
+    
+    .loading-info h3 {
+      font-size: 1.3rem;
+      color: var(--primary);
+      margin-bottom: 3px;
+    }
+    
+    .loading-info p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+    
+    /* Live Leads Preview */
+    .live-leads {
+      margin-bottom: 15px;
+    }
+    
+    .live-leads-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--success);
+      margin-bottom: 10px;
+    }
+    
+    .live-leads-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 150px;
+      overflow-y: auto;
+    }
+    
+    .live-lead-card {
+      background: var(--bg-input);
+      padding: 10px 12px;
+      border-radius: 8px;
+      border-left: 3px solid var(--success);
+    }
+    
+    .live-lead-name { font-weight: 600; font-size: 0.9rem; }
+    .live-lead-email { font-size: 0.8rem; color: var(--success); margin-top: 2px; }
+    .live-lead-meta { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
+    
+    /* Console */
+    .console {
+      background: #0d1117;
       border-radius: 10px;
+      padding: 12px;
+      font-family: 'Monaco', 'Consolas', monospace;
+      font-size: 0.7rem;
+    }
+    
+    .console-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding-bottom: 10px;
+      margin-bottom: 10px;
+      border-bottom: 1px solid #30363d;
+    }
+    
+    .console-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+    
+    .console-dot.red { background: #ff5f56; }
+    .console-dot.yellow { background: #ffbd2e; }
+    .console-dot.green { background: #27ca40; }
+    
+    .console-title {
+      margin-left: 8px;
+      color: #8b949e;
+      font-size: 0.65rem;
+    }
+    
+    .console-body {
+      height: 150px;
+      overflow-y: auto;
+      line-height: 1.5;
+    }
+    
+    .console-line {
+      padding: 2px 0;
+      border-bottom: 1px solid #21262d;
+      word-break: break-word;
+    }
+    
+    /* Table */
+    .table-wrap {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      border-radius: 8px;
       border: 1px solid var(--border);
     }
     
     table {
       width: 100%;
       border-collapse: collapse;
+      min-width: 600px;
     }
     
     th {
       background: var(--bg-input);
-      padding: 14px 16px;
+      padding: 12px;
       text-align: left;
-      font-weight: 600;
-      font-size: 0.85rem;
+      font-size: 0.75rem;
       text-transform: uppercase;
       color: var(--text-muted);
-      border-bottom: 1px solid var(--border);
-    }
-    
-    td {
-      padding: 14px 16px;
-      border-bottom: 1px solid var(--border);
-      font-size: 0.9rem;
-    }
-    
-    tr:hover {
-      background: rgba(255,255,255,0.02);
-    }
-    
-    .truncate {
-      max-width: 180px;
-      overflow: hidden;
-      text-overflow: ellipsis;
       white-space: nowrap;
     }
     
-    /* Source Badges */
+    td {
+      padding: 12px;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.85rem;
+    }
+    
+    tr:hover { background: rgba(255,255,255,0.02); }
+    
     .badge {
-      padding: 5px 12px;
+      padding: 4px 10px;
       border-radius: 20px;
-      font-size: 0.75rem;
+      font-size: 0.7rem;
       font-weight: 600;
     }
     
-    .badge-google { background: #4285f422; color: #60a5fa; }
     .badge-reddit { background: #ff450022; color: #fb923c; }
-    .badge-facebook { background: #1877f222; color: #60a5fa; }
-    .badge-instagram { background: #e4405f22; color: #f472b6; }
+    .badge-google { background: #4285f422; color: #60a5fa; }
     .badge-twitter { background: #1da1f222; color: #38bdf8; }
+    .badge-linkedin { background: #0077b522; color: #38bdf8; }
+    .badge-quora { background: #a82a2a22; color: #f87171; }
+    .badge-facebook { background: #1877f222; color: #60a5fa; }
     .badge-upwork { background: #6fda4422; color: #4ade80; }
-    .badge-fiverr { background: #1dbf7322; color: #34d399; }
-    
-    /* Loading State - Inline in results area */
-    .loading-overlay {
-      display: none;
-    }
-    
-    .loading-inline {
-      text-align: center;
-      padding: 40px 20px;
-    }
-    
-    .loading-spinner {
-      width: 50px;
-      height: 50px;
-      border: 4px solid var(--border);
-      border-top-color: var(--primary);
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-      margin: 0 auto 20px;
-    }
-    
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-    
-    .loading-progress {
-      font-size: 2rem;
-      color: var(--primary);
-      font-weight: 700;
-      margin-bottom: 10px;
-    }
-    
-    .loading-text {
-      font-size: 1rem;
-      color: var(--text-muted);
-    }
     
     .hidden { display: none !important; }
     
-    /* Empty State */
-    .empty-state {
-      text-align: center;
-      padding: 60px 20px;
-      color: var(--text-muted);
-    }
-    
-    .empty-icon {
-      font-size: 4rem;
-      margin-bottom: 20px;
-      opacity: 0.5;
-    }
-    
-    /* Responsive - Tablet */
+    /* Responsive */
     @media (max-width: 1024px) {
-      .sidebar { width: 80px; padding: 15px; }
-      .logo-text, .nav-item span:not(.nav-icon) { display: none; }
-      .main { margin-left: 80px; }
-      .extraction-panel { grid-template-columns: 1fr; }
-      .platform-grid { grid-template-columns: repeat(2, 1fr); }
-      .filters-row { grid-template-columns: 1fr; }
+      .sidebar { width: 70px; padding: 15px 10px; }
+      .logo-text, .nav-item span:last-child { display: none; }
+      .main { margin-left: 70px; }
+      .form-grid { grid-template-columns: 1fr; }
+      .stats-row { grid-template-columns: repeat(2, 1fr); }
     }
     
-    /* Responsive - Mobile */
     @media (max-width: 768px) {
-      .sidebar { 
-        display: none; 
-      }
-      
-      .main { 
-        margin-left: 0; 
-        padding: 15px; 
-      }
-      
-      .header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 15px;
-      }
-      
-      .header h1 {
-        font-size: 1.4rem;
-      }
-      
-      .header-stats {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 10px;
-        width: 100%;
-      }
-      
-      .stat-card {
-        padding: 12px 15px;
-        text-align: center;
-      }
-      
-      .stat-value {
-        font-size: 1.2rem;
-      }
-      
-      .stat-label {
-        font-size: 0.75rem;
-      }
-      
-      .extraction-panel { 
-        grid-template-columns: 1fr; 
-        gap: 15px;
-      }
-      
-      .card {
-        padding: 18px;
-      }
-      
-      .card-title {
-        font-size: 1rem;
-      }
-      
-      .platform-grid { 
-        grid-template-columns: repeat(2, 1fr); 
-        gap: 8px;
-      }
-      
-      .platform-item {
-        padding: 10px;
-        font-size: 0.85rem;
-      }
-      
-      .platform-item span:first-child {
-        font-size: 1rem;
-      }
-      
-      .filters-row { 
-        grid-template-columns: 1fr; 
-        gap: 12px;
-      }
-      
-      .btn-group {
-        flex-direction: column;
-        gap: 10px;
-      }
-      
-      .btn {
-        width: 100%;
-        justify-content: center;
-      }
-      
-      .results-panel {
-        padding: 15px;
-      }
-      
-      .results-header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 10px;
-      }
-      
-      .table-container {
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-      }
-      
-      table {
-        min-width: 700px;
-        font-size: 0.85rem;
-      }
-      
-      th, td {
-        padding: 10px 12px;
-      }
-      
-      .loading-progress {
-        font-size: 1.5rem;
-      }
-      
-      /* Mobile API status - show at top */
-      .mobile-status {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        background: var(--bg-card);
-        padding: 10px 15px;
-        border-radius: 8px;
-        margin-bottom: 15px;
-        font-size: 0.85rem;
-      }
-    }
-    
-    /* Small phones */
-    @media (max-width: 400px) {
-      .header-stats {
-        grid-template-columns: repeat(2, 1fr);
-      }
-      
-      .platform-grid { 
-        grid-template-columns: 1fr 1fr; 
-      }
-      
-      .stat-card {
-        padding: 10px;
-      }
-      
-      .stat-value {
-        font-size: 1rem;
-      }
+      .sidebar { display: none; }
+      .mobile-header { display: block; }
+      .main { margin-left: 0; padding: 15px; }
+      .page-header h1 { font-size: 1.2rem; }
+      .stats-row { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+      .stat-card { padding: 12px; }
+      .stat-value { font-size: 1.2rem; }
+      .form-grid { grid-template-columns: 1fr; gap: 15px; }
+      .card { padding: 15px; }
+      .filters-grid { grid-template-columns: 1fr; }
+      .btn-row { flex-direction: column; }
+      .results-header { flex-direction: column; align-items: stretch; }
+      .results-actions { justify-content: stretch; }
+      .results-actions .btn { flex: 1; }
     }
   </style>
 </head>
 <body>
+  <!-- Mobile Header -->
+  <header class="mobile-header">
+    <div class="mobile-header-content">
+      <div class="mobile-logo">
+        <div class="mobile-logo-icon">🎯</div>
+        <span class="mobile-logo-text">LeadGen Pro</span>
+      </div>
+      <div class="mobile-status">
+        <span class="status-dot" id="mobileStatusDot"></span>
+        <span id="mobileStatusText">...</span>
+      </div>
+    </div>
+  </header>
+
   <!-- Sidebar -->
   <aside class="sidebar">
     <div class="logo">
       <div class="logo-icon">🎯</div>
       <span class="logo-text">LeadGen Pro</span>
     </div>
-    
     <nav>
-      <a class="nav-item active">
-        <span class="nav-icon">🔍</span>
-        <span>Extract Leads</span>
-      </a>
-      <a class="nav-item">
-        <span class="nav-icon">📊</span>
-        <span>Dashboard</span>
-      </a>
-      <a class="nav-item">
-        <span class="nav-icon">📁</span>
-        <span>History</span>
-      </a>
-      <a class="nav-item">
-        <span class="nav-icon">⚙️</span>
-        <span>Settings</span>
-      </a>
+      <a class="nav-item active"><span>🔍</span><span>Extract Leads</span></a>
+      <a class="nav-item"><span>📊</span><span>Dashboard</span></a>
+      <a class="nav-item"><span>📁</span><span>History</span></a>
+      <a class="nav-item"><span>⚙️</span><span>Settings</span></a>
     </nav>
-    
     <div class="sidebar-footer">
       <div class="status-card">
-        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px;">API Status</div>
-        <div id="apiStatus">
-          <span class="status-dot offline"></span>
-          <span style="font-size: 0.9rem;">Checking...</span>
-        </div>
-        <div id="apiPlan" style="font-size: 0.75rem; color: var(--text-muted); margin-top: 5px;"></div>
+        <div style="color: var(--text-muted); font-size: 0.75rem; margin-bottom: 6px;">API Status</div>
+        <div id="apiStatus"><span class="status-dot offline"></span>Checking...</div>
+        <div id="apiPlan" style="font-size: 0.7rem; color: var(--text-muted); margin-top: 4px;"></div>
       </div>
     </div>
   </aside>
-  
-  <!-- Mobile Header (visible only on mobile) -->
-  <div class="mobile-header" style="display: none;">
-    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
-      <div class="logo-icon" style="width: 36px; height: 36px; background: linear-gradient(135deg, var(--primary), #8b5cf6); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem;">🎯</div>
-      <span style="font-weight: 700; font-size: 1.1rem;">LeadGen Pro</span>
-      <div id="mobileApiStatus" style="margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 0.8rem;">
-        <span class="status-dot offline" id="mobileStatusDot"></span>
-        <span id="mobileStatusText">...</span>
-      </div>
-    </div>
-  </div>
-  
-  <style>
-    @media (max-width: 768px) {
-      .mobile-header { display: block !important; padding: 15px; background: var(--bg-card); border-bottom: 1px solid var(--border); }
-    }
-  </style>
 
   <!-- Main Content -->
   <main class="main">
-    <div class="header">
-      <div>
-        <h1>Extract Leads</h1>
-        <p style="color: var(--text-muted); margin-top: 5px;">🎯 Find customers actively seeking your services — powered by AI</p>
+    <div class="page-header">
+      <h1>🎯 Extract Leads</h1>
+      <p>Find customers actively seeking your services — powered by AI</p>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-value" id="resultsCount">0</div>
+        <div class="stat-label">Requested</div>
       </div>
-      <div class="header-stats">
-        <div class="stat-card">
-          <div class="stat-value" id="requestedCount">0</div>
-          <div class="stat-label">Requested</div>
-        </div>
-        <div class="stat-card" style="border-color: var(--success);">
-          <div class="stat-value" id="foundCount" style="color: var(--success);">0</div>
-          <div class="stat-label">Emails ✅</div>
-        </div>
-        <div class="stat-card" style="border-color: var(--warning);">
-          <div class="stat-value" id="dmCount" style="color: var(--warning);">0</div>
-          <div class="stat-label">DM Required 💬</div>
-        </div>
-        <div class="stat-card" style="border-color: var(--danger);">
-          <div class="stat-value" id="notAvailableCount" style="color: var(--danger);">0</div>
-          <div class="stat-label">Not Available ❌</div>
-        </div>
+      <div class="stat-card">
+        <div class="stat-value success" id="emailCount">0</div>
+        <div class="stat-label">With Email</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value warning" id="dmCount">0</div>
+        <div class="stat-label">DM Required</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value danger" id="notAvailCount">0</div>
+        <div class="stat-label">Not Found</div>
       </div>
     </div>
-    
-    <div class="extraction-panel">
-      <!-- Keywords Card -->
+
+    <!-- Form -->
+    <div class="form-grid">
+      <!-- Services -->
       <div class="card">
         <div class="card-title">🔑 Services You Offer</div>
-        <div class="form-group">
-          <label class="form-label">Enter services to find customers for (one per line)</label>
-          <textarea class="form-input" id="keywords" placeholder="book publishing
-web development
-marketing services
-graphic design
-illustration services">book publishing
-web development</textarea>
-          <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 8px;">
-            💡 We'll find people actively looking for these services
-          </p>
-        </div>
+        <label class="form-label">Enter services to find customers for (one per line)</label>
+        <textarea class="form-input" id="keywords" placeholder="book publishing&#10;web development&#10;logo design">book publishing</textarea>
+        <p style="color: var(--text-muted); font-size: 0.8rem; margin-top: 8px;">💡 We'll find people actively looking for these services</p>
       </div>
-      
-      <!-- Platforms Card -->
+
+      <!-- Platforms -->
       <div class="card">
-        <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+        <div class="card-title">
           <span>📱 Platforms</span>
-          <button type="button" onclick="toggleAllPlatforms()" class="btn-link" style="font-size: 0.8rem; color: var(--primary); background: none; border: none; cursor: pointer;">Select All</button>
+          <button type="button" class="btn-link" onclick="toggleAllPlatforms()">Select All</button>
         </div>
         <div class="platform-grid">
           <label class="platform-item selected">
             <input type="checkbox" name="platform" value="google" checked>
-            <span class="platform-icon">🔍</span>
-            <span class="platform-name">Google</span>
+            <span class="platform-icon">🔍</span><span>Google</span>
             <span class="platform-status">✓</span>
           </label>
           <label class="platform-item selected">
             <input type="checkbox" name="platform" value="reddit" checked>
-            <span class="platform-icon">🤖</span>
-            <span class="platform-name">Reddit</span>
+            <span class="platform-icon">🤖</span><span>Reddit</span>
             <span class="platform-status">✓</span>
           </label>
           <label class="platform-item">
             <input type="checkbox" name="platform" value="twitter">
-            <span class="platform-icon">🐦</span>
-            <span class="platform-name">Twitter</span>
+            <span class="platform-icon">🐦</span><span>Twitter</span>
           </label>
           <label class="platform-item">
             <input type="checkbox" name="platform" value="linkedin">
-            <span class="platform-icon">💼</span>
-            <span class="platform-name">LinkedIn</span>
+            <span class="platform-icon">💼</span><span>LinkedIn</span>
           </label>
           <label class="platform-item">
             <input type="checkbox" name="platform" value="facebook">
-            <span class="platform-icon">📘</span>
-            <span class="platform-name">Facebook</span>
-          </label>
-          <label class="platform-item">
-            <input type="checkbox" name="platform" value="instagram">
-            <span class="platform-icon">📸</span>
-            <span class="platform-name">Instagram</span>
+            <span class="platform-icon">📘</span><span>Facebook</span>
           </label>
           <label class="platform-item">
             <input type="checkbox" name="platform" value="quora">
-            <span class="platform-icon">❓</span>
-            <span class="platform-name">Quora</span>
+            <span class="platform-icon">❓</span><span>Quora</span>
           </label>
           <label class="platform-item">
             <input type="checkbox" name="platform" value="upwork">
-            <span class="platform-icon">📋</span>
-            <span class="platform-name">Upwork</span>
+            <span class="platform-icon">📋</span><span>Upwork</span>
+          </label>
+          <label class="platform-item">
+            <input type="checkbox" name="platform" value="instagram">
+            <span class="platform-icon">📸</span><span>Instagram</span>
           </label>
         </div>
-        <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 12px;">
-          🤖 AI scans each result to find real customers (not companies)
-        </p>
+        <p style="color: var(--text-muted); font-size: 0.8rem; margin-top: 10px;">🤖 AI scans each result to find real customers</p>
       </div>
-      
-      <!-- Filters Card -->
-      <div class="card" style="grid-column: 1 / -1;">
-        <div class="card-title">🎛️ Filters</div>
-        <div class="filters-row">
-          <div class="form-group" style="margin-bottom: 0;">
-            <label class="form-label">Region</label>
-            <select class="form-select" id="region">
-              <option value="us">🇺🇸 United States</option>
-              <option value="uk">🇬🇧 United Kingdom</option>
-              <option value="ca">🇨🇦 Canada</option>
-              <option value="au">🇦🇺 Australia</option>
-              <option value="all">🌍 All Regions</option>
-            </select>
-          </div>
-          <div class="form-group" style="margin-bottom: 0;">
-            <label class="form-label">Timeframe</label>
-            <select class="form-select" id="timeframe">
-              <option value="d">Last 24 Hours</option>
-              <option value="w">Last 7 Days</option>
-              <option value="m">Last 30 Days</option>
-              <option value="all">All Time</option>
-            </select>
-          </div>
-          <div class="form-group" style="margin-bottom: 0;">
-            <label class="form-label">Max Results Per Platform</label>
-            <select class="form-select" id="maxResults">
-              <option value="2">2 results</option>
-              <option value="3">3 results</option>
-              <option value="5" selected>5 results</option>
-              <option value="10" disabled>10 results (Pro)</option>
-              <option value="20" disabled>20 results (Pro)</option>
-              <option value="50" disabled>50 results (Pro)</option>
-              <option value="100" disabled>100 results (Pro)</option>
-            </select>
-          </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card" style="margin-bottom: 25px;">
+      <div class="card-title">🎛️ Filters</div>
+      <div class="filters-grid">
+        <div>
+          <label class="form-label">Region</label>
+          <select class="form-select" id="region">
+            <option value="us">🇺🇸 United States</option>
+            <option value="uk">🇬🇧 United Kingdom</option>
+            <option value="ca">🇨🇦 Canada</option>
+            <option value="au">🇦🇺 Australia</option>
+          </select>
         </div>
-        
-        <div style="margin-top: 25px; display: flex; gap: 15px;">
-          <button class="btn btn-primary btn-lg" id="extractBtn" onclick="startExtraction()">
-            🚀 Start Extraction
-          </button>
-          <button class="btn btn-secondary" onclick="resetForm()">
-            🔄 Reset
-          </button>
+        <div>
+          <label class="form-label">Timeframe</label>
+          <select class="form-select" id="timeframe">
+            <option value="d">Last 24 Hours</option>
+            <option value="w">Last Week</option>
+            <option value="m">Last Month</option>
+            <option value="">All Time</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Max Results</label>
+          <select class="form-select" id="maxResults">
+            <option value="5">5 results</option>
+            <option value="10">10 results</option>
+            <option value="25">25 results</option>
+            <option value="50">50 results</option>
+          </select>
         </div>
       </div>
-      
-      <!-- Results Card -->
-      <div class="card results-card" id="resultsCard">
-        <div class="results-header">
-          <div class="results-count">
-            <span id="resultsCount">0</span> Leads Found
-          </div>
-          <div class="results-actions">
-            <button class="btn btn-secondary" onclick="copyEmails()">📋 Copy Emails</button>
-            <button class="btn btn-success" onclick="exportExcel()">📥 Export Excel</button>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="extractBtn" onclick="startExtraction()">🚀 Start Extraction</button>
+        <button class="btn btn-secondary" onclick="resetForm()">🔄 Reset</button>
+      </div>
+    </div>
+
+    <!-- Results -->
+    <div class="results-section">
+      <div class="results-header">
+        <div class="results-title"><span id="leadsCount">0</span> Leads Found</div>
+        <div class="results-actions">
+          <button class="btn btn-secondary" onclick="copyEmails()">📋 Copy Emails</button>
+          <button class="btn btn-success" onclick="exportExcel()">📥 Export Excel</button>
+        </div>
+      </div>
+
+      <!-- Empty State -->
+      <div id="emptyState" class="empty-state">
+        <div class="empty-icon">📭</div>
+        <h3>No leads yet</h3>
+        <p style="margin-top: 8px;">Configure your settings above and click "Start Extraction"</p>
+      </div>
+
+      <!-- Loading State -->
+      <div id="loadingState" class="loading-state hidden">
+        <div class="loading-header">
+          <div class="loading-spinner"></div>
+          <div class="loading-info">
+            <h3 id="loadingProgress">0/5 leads</h3>
+            <p id="loadingText">Starting search...</p>
           </div>
         </div>
-        
-        <div id="emptyState" class="empty-state">
-          <div class="empty-icon">📭</div>
-          <h3>No leads yet</h3>
-          <p style="margin-top: 10px;">Configure your settings above and click "Start Extraction"</p>
+
+        <!-- Live Leads -->
+        <div id="liveLeadsSection" class="live-leads hidden">
+          <div class="live-leads-title">✅ Leads Found:</div>
+          <div id="liveLeadsList" class="live-leads-list"></div>
         </div>
-        
-        <div id="loadingState" class="empty-state hidden" style="max-width: 100%; padding: 15px; text-align: left;">
-          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 15px;">
-            <div class="loading-spinner" style="width: 35px; height: 35px; flex-shrink: 0;"></div>
-            <div style="min-width: 0;">
-              <div class="loading-progress" id="loadingProgress" style="margin: 0; font-size: 1.3rem;">0/5 leads</div>
-              <div class="loading-text" id="loadingText" style="font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Starting search...</div>
-            </div>
+
+        <!-- Console -->
+        <div class="console">
+          <div class="console-header">
+            <span class="console-dot red"></span>
+            <span class="console-dot yellow"></span>
+            <span class="console-dot green"></span>
+            <span class="console-title">AI Console</span>
           </div>
-          
-          <!-- Live Leads Preview -->
-          <div id="liveLeadsPreview" style="margin-bottom: 15px; display: none;">
-            <div style="font-size: 0.85rem; font-weight: 600; margin-bottom: 10px; color: var(--success);">✅ Leads Found:</div>
-            <div id="liveLeadsList" style="background: var(--bg-input); border-radius: 8px; padding: 10px; max-height: 150px; overflow-y: auto;">
-            </div>
-          </div>
-          
-          <!-- Live Activity Console - Fixed Frame -->
-          <div style="background: #0d1117; border-radius: 10px; padding: 12px; text-align: left; font-family: monospace; font-size: 0.7rem; width: 100%; box-sizing: border-box;">
-            <div style="display: flex; gap: 6px; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #30363d;">
-              <span style="width: 10px; height: 10px; border-radius: 50%; background: #ff5f56; flex-shrink: 0;"></span>
-              <span style="width: 10px; height: 10px; border-radius: 50%; background: #ffbd2e; flex-shrink: 0;"></span>
-              <span style="width: 10px; height: 10px; border-radius: 50%; background: #27ca40; flex-shrink: 0;"></span>
-              <span style="margin-left: 8px; color: #8b949e; font-size: 0.65rem;">AI Console</span>
-            </div>
-            <div id="loadingDetails" style="height: 150px; overflow-y: auto; overflow-x: hidden; line-height: 1.5; word-break: break-all;">
-              <div style="color: #8b949e;">$ Initializing...</div>
-            </div>
+          <div class="console-body" id="consoleBody">
+            <div class="console-line" style="color: #8b949e;">$ Initializing...</div>
           </div>
         </div>
-        
-        <div class="table-container hidden" id="tableContainer">
+      </div>
+
+      <!-- Results Table -->
+      <div id="tableContainer" class="hidden">
+        <div class="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>Customer Name</th>
+                <th>Name</th>
                 <th>Contact</th>
+                <th>Phone</th>
                 <th>Intent</th>
                 <th>Source</th>
-                <th>What They Need</th>
-                <th>Post Title</th>
+                <th>Need</th>
                 <th>Link</th>
               </tr>
             </thead>
-            <tbody id="resultsBody">
-            </tbody>
+            <tbody id="resultsBody"></tbody>
           </table>
         </div>
       </div>
     </div>
   </main>
-  
-  <!-- Loading Overlay -->
-  <!-- Loading handled inline in empty state -->
-  
+
   <script>
     let allLeads = [];
     
-    // Simple platform toggle - just two states: selected or not
+    // Platform toggle
     function syncPlatform(item) {
-      const checkbox = item.querySelector('input');
-      const isSelected = checkbox.checked;
-      
-      // Update visual
-      item.classList.toggle('selected', isSelected);
-      
-      // Update checkmark
+      const cb = item.querySelector('input');
+      item.classList.toggle('selected', cb.checked);
       let status = item.querySelector('.platform-status');
-      if (isSelected) {
+      if (cb.checked) {
         if (!status) {
           status = document.createElement('span');
           status.className = 'platform-status';
@@ -908,99 +823,51 @@ web development</textarea>
       }
     }
     
-    // Toggle all platforms
     function toggleAllPlatforms() {
       const items = document.querySelectorAll('.platform-item');
-      const allSelected = Array.from(items).every(item => item.querySelector('input').checked);
-      
+      const allSelected = Array.from(items).every(i => i.querySelector('input').checked);
       items.forEach(item => {
         item.querySelector('input').checked = !allSelected;
         syncPlatform(item);
       });
-      
-      // Update button text
-      const btn = document.querySelector('.btn-link');
-      if (btn) btn.textContent = allSelected ? 'Select All' : 'Clear All';
+      document.querySelector('.btn-link').textContent = allSelected ? 'Select All' : 'Clear All';
     }
     
-    // Initialize platforms - single click handler on label
     document.querySelectorAll('.platform-item').forEach(item => {
-      const checkbox = item.querySelector('input');
-      
-      // Sync initial state
       syncPlatform(item);
-      
-      // Single handler: listen to checkbox change only (label click triggers this)
-      checkbox.addEventListener('change', () => syncPlatform(item));
+      item.querySelector('input').addEventListener('change', () => syncPlatform(item));
     });
     
-    // Add lead to live preview
-    function addLiveLeadPreview(lead) {
-      const preview = document.getElementById('liveLeadsPreview');
-      const list = document.getElementById('liveLeadsList');
-      if (!preview || !list) return;
-      
-      preview.style.display = 'block';
-      
-      const card = document.createElement('div');
-      card.style.cssText = 'background: var(--bg-card); padding: 10px; border-radius: 6px; margin-bottom: 8px; border-left: 3px solid var(--success);';
-      
-      const emailDisplay = lead.email === 'With DM Me' 
-        ? `<span style="color: var(--warning);">💬 DM Required</span>` 
-        : `<span style="color: var(--success);">📧 ${lead.email}</span>`;
-      
-      card.innerHTML = `
-        <div style="font-weight: 600; font-size: 0.9rem; margin-bottom: 4px;">${lead.name}</div>
-        <div style="font-size: 0.8rem;">${emailDisplay}</div>
-        <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">
-          <span style="color: var(--primary);">🔥 ${lead.intentScore}/10</span> · ${lead.source}
-        </div>
-      `;
-      
-      list.insertBefore(card, list.firstChild);
+    // Console logging
+    function addLog(msg, type = 'info') {
+      const body = document.getElementById('consoleBody');
+      const colors = { brightdata: '#58a6ff', ai: '#a371f7', success: '#3fb950', info: '#8b949e', search: '#f0883e' };
+      const icons = { brightdata: '⚡', ai: '🤖', success: '✅', info: '→', search: '🔍' };
+      const line = document.createElement('div');
+      line.className = 'console-line';
+      line.style.color = colors[type] || colors.info;
+      const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+      line.innerHTML = `<span style="opacity:0.4;font-size:0.6rem">${time}</span> ${icons[type]||'→'} ${msg}`;
+      body.insertBefore(line, body.firstChild);
+      while (body.children.length > 50) body.removeChild(body.lastChild);
     }
     
-    // Activity log for transparency - terminal style
-    function addActivityLog(message, type = 'info') {
-      const log = document.getElementById('loadingDetails');
-      if (!log) return;
-      
-      const colors = {
-        'brightdata': '#58a6ff',  // Blue for Bright Data
-        'ai': '#a371f7',          // Purple for AI
-        'success': '#3fb950',     // Green for success
-        'info': '#8b949e',        // Gray for info
-        'search': '#f0883e'       // Orange for search
-      };
-      
-      const icons = {
-        'brightdata': '⚡',
-        'ai': '🤖',
-        'success': '✅',
-        'info': '→',
-        'search': '🔍'
-      };
-      
-      const entry = document.createElement('div');
-      entry.style.color = colors[type] || colors.info;
-      entry.style.padding = '3px 0';
-      entry.style.borderBottom = '1px solid #21262d';
-      entry.style.wordBreak = 'break-word';
-      entry.style.fontSize = '0.7rem';
-      entry.style.lineHeight = '1.4';
-      
-      // Shorter timestamp for mobile
-      const time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      entry.innerHTML = `<span style="opacity: 0.4; font-size: 0.6rem;">${time}</span> ${icons[type] || '→'} ${message}`;
-      log.insertBefore(entry, log.firstChild);
-      
-      // Keep only last 30 entries
-      while (log.children.length > 30) {
-        log.removeChild(log.lastChild);
-      }
-      
-      // Auto scroll to top
-      log.scrollTop = 0;
+    // Add live lead
+    function addLiveLead(lead) {
+      const section = document.getElementById('liveLeadsSection');
+      const list = document.getElementById('liveLeadsList');
+      section.classList.remove('hidden');
+      const card = document.createElement('div');
+      card.className = 'live-lead-card';
+      const emailHtml = lead.email === 'With DM Me' 
+        ? '<span style="color:var(--warning)">💬 DM Required</span>' 
+        : `<span style="color:var(--success)">📧 ${lead.email}</span>`;
+      card.innerHTML = `
+        <div class="live-lead-name">${lead.name}</div>
+        <div class="live-lead-email">${emailHtml}</div>
+        <div class="live-lead-meta">🔥 ${lead.intentScore}/10 · ${lead.source}</div>
+      `;
+      list.insertBefore(card, list.firstChild);
     }
     
     // Check API status
@@ -1008,122 +875,77 @@ web development</textarea>
       try {
         const res = await fetch('/api/status');
         const data = await res.json();
-        
-        const statusEl = document.getElementById('apiStatus');
-        const planEl = document.getElementById('apiPlan');
-        const mobileStatusDot = document.getElementById('mobileStatusDot');
-        const mobileStatusText = document.getElementById('mobileStatusText');
-        
-        if (data.connected) {
-          statusEl.innerHTML = `<span class="status-dot online"></span><span style="font-size: 0.9rem;">Connected</span>`;
-          planEl.textContent = data.agent || 'Bright Data';
-          // Update mobile status
-          if (mobileStatusDot) mobileStatusDot.className = 'status-dot online';
-          if (mobileStatusText) mobileStatusText.textContent = 'API ✓';
-        } else {
-          statusEl.innerHTML = `<span class="status-dot offline"></span><span style="font-size: 0.9rem;">Disconnected</span>`;
-          if (mobileStatusDot) mobileStatusDot.className = 'status-dot offline';
-          if (mobileStatusText) mobileStatusText.textContent = 'Offline';
-        }
-      } catch (err) {
-        document.getElementById('apiStatus').innerHTML = `<span class="status-dot offline"></span><span style="font-size: 0.9rem;">Error</span>`;
-        const mobileStatusDot = document.getElementById('mobileStatusDot');
-        const mobileStatusText = document.getElementById('mobileStatusText');
-        if (mobileStatusDot) mobileStatusDot.className = 'status-dot offline';
-        if (mobileStatusText) mobileStatusText.textContent = 'Error';
+        const dot = data.connected ? 'online' : 'offline';
+        const text = data.connected ? 'Connected' : 'Offline';
+        document.getElementById('apiStatus').innerHTML = `<span class="status-dot ${dot}"></span>${text}`;
+        document.getElementById('apiPlan').textContent = data.agent || '';
+        const mDot = document.getElementById('mobileStatusDot');
+        const mText = document.getElementById('mobileStatusText');
+        if (mDot) mDot.className = `status-dot ${dot}`;
+        if (mText) mText.textContent = data.connected ? 'API ✓' : 'Offline';
+      } catch (e) {
+        document.getElementById('apiStatus').innerHTML = '<span class="status-dot offline"></span>Error';
       }
     }
+    checkStatus();
     
     // Start extraction
     async function startExtraction() {
-      const keywords = document.getElementById('keywords').value
-        .split('\n')
-        .map(k => k.trim())
-        .filter(k => k);
-      
-      const platforms = Array.from(document.querySelectorAll('input[name="platform"]:checked'))
-        .map(el => el.value);
-      
+      const keywords = document.getElementById('keywords').value.split('\n').map(k => k.trim()).filter(k => k);
+      const platforms = Array.from(document.querySelectorAll('input[name="platform"]:checked')).map(el => el.value);
       const region = document.getElementById('region').value;
       const timeframe = document.getElementById('timeframe').value;
       const maxResults = parseInt(document.getElementById('maxResults').value);
       
-      if (keywords.length === 0) {
-        alert('Please enter at least one keyword');
-        return;
-      }
+      if (!keywords.length) return alert('Enter at least one keyword');
+      if (!platforms.length) return alert('Select at least one platform');
       
-      if (platforms.length === 0) {
-        alert('Please select at least one platform');
-        return;
-      }
-      
-      // Show loading inline
+      // Show loading
       document.getElementById('emptyState').classList.add('hidden');
       document.getElementById('tableContainer').classList.add('hidden');
       document.getElementById('loadingState').classList.remove('hidden');
-      document.getElementById('extractBtn').disabled = true;
-      document.getElementById('loadingText').textContent = '🔍 Starting search...';
-      document.getElementById('loadingProgress').textContent = '0/' + maxResults + ' leads';
-      
-      // Clear live preview
-      document.getElementById('liveLeadsPreview').style.display = 'none';
+      document.getElementById('liveLeadsSection').classList.add('hidden');
       document.getElementById('liveLeadsList').innerHTML = '';
-      document.getElementById('loadingDetails').innerHTML = '<div style="color: #8b949e;">$ Starting extraction...</div>';
+      document.getElementById('consoleBody').innerHTML = '<div class="console-line" style="color:#8b949e">$ Starting extraction...</div>';
+      document.getElementById('extractBtn').disabled = true;
+      document.getElementById('loadingProgress').textContent = `0/${maxResults} leads`;
+      document.getElementById('loadingText').textContent = 'Connecting to Bright Data...';
       
       try {
-        // Use Server-Sent Events for real-time progress
-        const params = new URLSearchParams({
-          keywords: keywords.join(','),
-          platforms: platforms.join(','),
-          maxResults,
-          region,
-          timeframe
-        });
+        const params = new URLSearchParams({ keywords: keywords.join(','), platforms: platforms.join(','), maxResults, region, timeframe });
+        const es = new EventSource('/api/extract-stream?' + params);
         
-        const eventSource = new EventSource('/api/extract-stream?' + params.toString());
-        
-        eventSource.onmessage = (event) => {
-          const data = JSON.parse(event.data);
+        es.onmessage = (e) => {
+          const data = JSON.parse(e.data);
           
           if (data.type === 'progress') {
             document.getElementById('loadingText').textContent = data.message;
             document.getElementById('loadingProgress').textContent = `${data.found}/${data.total} leads`;
-            
-            // Determine log type based on message content
             let logType = 'info';
-            if (data.message.includes('Searching')) logType = 'search';
-            else if (data.message.includes('Found') && data.message.includes('results')) logType = 'brightdata';
-            else if (data.message.includes('AI analyzing')) logType = 'ai';
-            
-            addActivityLog(data.message.replace(/^[🔍📄🤖✅]\s*/, ''), logType);
+            if (data.message.includes('BRIGHT DATA')) logType = 'brightdata';
+            else if (data.message.includes('AI')) logType = 'ai';
+            else if (data.message.includes('Searching')) logType = 'search';
+            addLog(data.message.replace(/^[⚡🔍🤖📄📝🌍❌⚠️✅→↳]\s*/g, ''), logType);
           }
           
           if (data.type === 'lead') {
-            document.getElementById('loadingText').textContent = `✅ Found: ${data.lead.name}`;
             document.getElementById('loadingProgress').textContent = `${data.found}/${data.total} leads`;
-            document.getElementById('resultsCount').textContent = data.found;
-            
-            // Add lead found with details
-            addActivityLog(`LEAD QUALIFIED: ${data.lead.name}`, 'success');
-            addActivityLog(`↳ Email: ${data.lead.email}`, 'success');
-            addActivityLog(`↳ Intent Score: ${data.lead.intentScore}/10`, 'success');
-            
-            // Add to live preview list
-            addLiveLeadPreview(data.lead);
+            document.getElementById('leadsCount').textContent = data.found;
+            addLog(`LEAD: ${data.lead.name} - ${data.lead.email}`, 'success');
+            addLiveLead(data.lead);
           }
           
           if (data.type === 'complete') {
-            eventSource.close();
+            es.close();
             allLeads = data.leads;
             document.getElementById('loadingState').classList.add('hidden');
             displayResults(data.leads);
-            updateStats({ success: true, ...data.stats, leads: data.leads });
+            updateStats(data);
             document.getElementById('extractBtn').disabled = false;
           }
           
           if (data.type === 'error') {
-            eventSource.close();
+            es.close();
             alert('Error: ' + data.error);
             document.getElementById('loadingState').classList.add('hidden');
             document.getElementById('emptyState').classList.remove('hidden');
@@ -1131,13 +953,12 @@ web development</textarea>
           }
         };
         
-        eventSource.onerror = () => {
-          eventSource.close();
+        es.onerror = () => {
+          es.close();
           document.getElementById('loadingState').classList.add('hidden');
           document.getElementById('emptyState').classList.remove('hidden');
           document.getElementById('extractBtn').disabled = false;
         };
-        
       } catch (err) {
         alert('Error: ' + err.message);
         document.getElementById('loadingState').classList.add('hidden');
@@ -1146,9 +967,8 @@ web development</textarea>
       }
     }
     
-    // Display results
     function displayResults(leads) {
-      document.getElementById('resultsCount').textContent = leads.length;
+      document.getElementById('leadsCount').textContent = leads.length;
       document.getElementById('emptyState').classList.toggle('hidden', leads.length > 0);
       document.getElementById('tableContainer').classList.toggle('hidden', leads.length === 0);
       
@@ -1156,82 +976,59 @@ web development</textarea>
       tbody.innerHTML = '';
       
       leads.forEach(lead => {
-        const badgeClass = `badge-${(lead.source || '').toLowerCase()}`;
-        const isDmLead = lead.contactMethod === 'dm' || (lead.email && lead.email.startsWith('(DM'));
-        const intentScore = lead.intentScore || 0;
-        const intentColor = intentScore >= 8 ? 'var(--success)' : intentScore >= 5 ? 'var(--warning)' : 'var(--text-muted)';
-        const intentBars = '🔥'.repeat(Math.min(Math.floor(intentScore / 2), 5));
-        
-        // Build contact info
-        let contactHtml = '';
-        if (lead.email && lead.email.includes('@')) {
-          contactHtml = `<span style="color: var(--success);">📧 ${lead.email}</span>`;
-        } else if (isDmLead) {
-          const profileLink = lead.url || '#';
-          contactHtml = `<span style="color: var(--warning);">💬 ${lead.username || 'DM on ' + lead.source}</span>`;
-        } else {
-          contactHtml = '<span style="color: var(--text-muted);">-</span>';
-        }
+        const badge = `badge-${(lead.source || 'google').toLowerCase()}`;
+        const contactHtml = lead.email.includes('@') 
+          ? `<span style="color:var(--success)">📧 ${lead.email}</span>`
+          : `<span style="color:var(--warning)">💬 ${lead.email}</span>`;
+        const intentBars = '🔥'.repeat(Math.ceil(lead.intentScore / 2));
         
         const row = document.createElement('tr');
         row.innerHTML = `
-          <td>${lead.name || lead.username || '-'}</td>
+          <td><strong>${lead.name}</strong></td>
           <td>${contactHtml}</td>
-          <td style="color: ${intentColor}; font-weight: 600;">${intentScore}/10 ${intentBars}</td>
-          <td><span class="badge ${badgeClass}">${lead.source}</span></td>
-          <td class="truncate" title="${lead.intent || ''}">${lead.intent || lead.query || '-'}</td>
-          <td class="truncate">${lead.title || '-'}</td>
-          <td>${lead.url ? `<a href="${lead.url}" target="_blank" style="color: var(--primary);">🔗 Open</a>` : '-'}</td>
+          <td>${lead.phone || '-'}</td>
+          <td><span title="${lead.intentScore}/10">${intentBars}</span></td>
+          <td><span class="badge ${badge}">${lead.source}</span></td>
+          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${lead.intent || '-'}</td>
+          <td><a href="${lead.url}" target="_blank" style="color:var(--primary)">🔗</a></td>
         `;
         tbody.appendChild(row);
       });
     }
     
-    // Update stats
     function updateStats(data) {
-      document.getElementById('requestedCount').textContent = data.requested || 0;
-      document.getElementById('foundCount').textContent = data.found || 0;
-      document.getElementById('dmCount').textContent = data.dmLeads || 0;
-      document.getElementById('notAvailableCount').textContent = data.notAvailable || 0;
+      const emailLeads = allLeads.filter(l => l.email && l.email.includes('@')).length;
+      const dmLeads = allLeads.filter(l => l.email === 'With DM Me').length;
+      document.getElementById('resultsCount').textContent = data.stats?.qualified || allLeads.length;
+      document.getElementById('emailCount').textContent = emailLeads;
+      document.getElementById('dmCount').textContent = dmLeads;
+      document.getElementById('notAvailCount').textContent = data.notAvailable || 0;
     }
     
-    // Copy emails (only real emails, not DM leads)
+    function resetForm() {
+      document.getElementById('keywords').value = '';
+      document.querySelectorAll('input[name="platform"]').forEach(cb => { cb.checked = false; syncPlatform(cb.closest('.platform-item')); });
+      allLeads = [];
+      document.getElementById('leadsCount').textContent = '0';
+      document.getElementById('resultsCount').textContent = '0';
+      document.getElementById('emailCount').textContent = '0';
+      document.getElementById('dmCount').textContent = '0';
+      document.getElementById('notAvailCount').textContent = '0';
+      document.getElementById('emptyState').classList.remove('hidden');
+      document.getElementById('tableContainer').classList.add('hidden');
+      document.getElementById('loadingState').classList.add('hidden');
+    }
+    
     function copyEmails() {
-      const emails = allLeads
-        .filter(l => l.email && !l.email.startsWith('(DM') && !l.email.startsWith('(contact'))
-        .map(l => l.email)
-        .join('\n');
-      if (!emails) {
-        alert('No emails to copy (only DM leads found - contact them directly on the platform)');
-        return;
-      }
-      navigator.clipboard.writeText(emails);
-      alert(`Copied ${emails.split('\n').length} emails to clipboard!`);
+      const emails = allLeads.filter(l => l.email && l.email.includes('@')).map(l => l.email).join('\n');
+      if (!emails) return alert('No emails to copy');
+      navigator.clipboard.writeText(emails).then(() => alert('Emails copied!')).catch(() => alert('Failed to copy'));
     }
     
-    // Export to Excel
     function exportExcel() {
-      if (allLeads.length === 0) {
-        alert('No leads to export');
-        return;
-      }
+      if (!allLeads.length) return alert('No leads to export');
       window.location.href = '/api/export';
     }
-    
-    // Reset form
-    function resetForm() {
-      document.getElementById('keywords').value = 'book publishing\nweb development';
-      document.querySelectorAll('input[name="platform"]').forEach((el, i) => {
-        el.checked = i < 2;
-        el.closest('.platform-item').classList.toggle('selected', i < 2);
-      });
-      document.getElementById('region').value = 'us';
-      document.getElementById('timeframe').value = 'd';
-      document.getElementById('maxResults').value = '20';
-    }
-    
-    // Initialize
-    checkStatus();
   </script>
 </body>
 </html>
