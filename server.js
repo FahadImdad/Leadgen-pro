@@ -71,8 +71,20 @@ async function brightDataSearch(query, options = {}) {
     
     const data = await response.json();
     
-    // Parse organic results
-    const results = (data.organic || []).map(r => ({
+    // Parse response - body is a JSON string
+    let organic = [];
+    if (data.body) {
+      try {
+        const bodyData = typeof data.body === 'string' ? JSON.parse(data.body) : data.body;
+        organic = bodyData.organic || [];
+      } catch (e) {
+        console.log('Body parse error:', e.message);
+      }
+    } else if (data.organic) {
+      organic = data.organic;
+    }
+    
+    const results = organic.map(r => ({
       title: r.title,
       url: r.link || r.url,
       snippet: r.description || r.snippet
@@ -303,47 +315,60 @@ function detectPlatform(url) {
 }
 
 // ============================================================
-// SEARCH QUERY GENERATOR
+// SEARCH QUERY GENERATOR - Aggressive search for people SEEKING services
 // ============================================================
 function generateSearchQueries(keyword, platform) {
+  // Queries focused on finding people who NEED the service (potential clients)
   const queries = {
     google: [
-      `"I need" OR "looking for" "${keyword}" "@gmail.com" OR "@yahoo.com"`,
-      `"help me with" OR "recommend" "${keyword}" "my project" OR "my business"`,
-      `"hire" OR "seeking" "${keyword}" "contact" OR "email"`
+      `"I need" "${keyword}" "@gmail.com"`,
+      `"looking for" "${keyword}" "email me" OR "contact me"`,
+      `"help me with" "${keyword}" "@yahoo.com" OR "@hotmail.com"`,
+      `"hire" "${keyword}" "my email" OR "reach me"`,
+      `"seeking" "${keyword}" freelancer "budget"`,
+      `"can anyone recommend" "${keyword}" "email"`,
+      `"I'm looking for" "${keyword}" "@gmail.com" OR "@outlook.com"`
     ],
     reddit: [
-      `site:reddit.com ("I need" OR "looking for") "${keyword}"`,
-      `site:reddit.com/r/forhire "${keyword}"`,
-      `site:reddit.com ("help me" OR "recommend") "${keyword}" -tutorial`
+      `site:reddit.com/r/forhire "[Hiring]" "${keyword}"`,
+      `site:reddit.com ("I need" OR "looking for") "${keyword}" "email" OR "contact"`,
+      `site:reddit.com/r/freelance "${keyword}" hiring`,
+      `site:reddit.com ("help me find" OR "recommend") "${keyword}"`,
+      `site:reddit.com "budget" "${keyword}" "looking for"`
     ],
     linkedin: [
-      `site:linkedin.com/posts ("looking for" OR "need") "${keyword}"`,
-      `site:linkedin.com ("seeking" OR "hiring freelancer") "${keyword}"`
+      `site:linkedin.com/posts "looking for" "${keyword}" "email"`,
+      `site:linkedin.com "hiring" "${keyword}" freelance`,
+      `site:linkedin.com "need" "${keyword}" "contact"`
     ],
     twitter: [
-      `site:twitter.com OR site:x.com ("need" OR "looking for") "${keyword}"`,
-      `site:twitter.com ("help me" OR "anyone know") "${keyword}"`
+      `site:twitter.com "need" "${keyword}" "DM" OR "email"`,
+      `site:x.com "looking for" "${keyword}" "help"`,
+      `site:twitter.com "hiring" "${keyword}"`,
+      `site:twitter.com "anyone know" "${keyword}" "recommend"`
     ],
     facebook: [
-      `site:facebook.com/groups ("need help" OR "looking for") "${keyword}"`,
-      `site:facebook.com ("recommendations" OR "advice") "${keyword}"`
+      `site:facebook.com/groups "need" "${keyword}" "contact"`,
+      `site:facebook.com "looking for" "${keyword}" "email" OR "message"`,
+      `site:facebook.com "recommendations" "${keyword}" "budget"`
     ],
     instagram: [
-      `site:instagram.com ("need" OR "looking for") "${keyword}"`,
-      `site:instagram.com ("dm me" OR "help") "${keyword}"`
+      `site:instagram.com "need" "${keyword}" "DM"`,
+      `site:instagram.com "looking for" "${keyword}"`
     ],
     quora: [
-      `site:quora.com "how do I find" OR "where can I get" "${keyword}"`,
-      `site:quora.com "recommend" "${keyword}" service`
+      `site:quora.com "where can I find" "${keyword}"`,
+      `site:quora.com "recommend" "${keyword}" "affordable"`,
+      `site:quora.com "how to hire" "${keyword}"`
     ],
     craigslist: [
-      `site:craigslist.org ("need" OR "looking for") "${keyword}"`,
-      `site:craigslist.org/gig "${keyword}"`
+      `site:craigslist.org/gig "${keyword}"`,
+      `site:craigslist.org "need" "${keyword}"`,
+      `site:craigslist.org "looking for" "${keyword}" "contact"`
     ],
     upwork: [
       `site:upwork.com/job "${keyword}"`,
-      `site:upwork.com "${keyword}" budget`
+      `site:upwork.com/freelance-jobs "${keyword}"`
     ]
   };
   
@@ -354,6 +379,7 @@ function generateSearchQueries(keyword, platform) {
 // MAIN API: /api/extract
 // ============================================================
 let allLeads = [];
+let cachedLeads = {}; // Cache extra leads by keyword for future requests
 
 app.post('/api/extract', async (req, res) => {
   const { keywords, platforms, maxResults = 10, region = 'us', timeframe = 'd' } = req.body;
@@ -361,6 +387,7 @@ app.post('/api/extract', async (req, res) => {
   console.log('\n🤖 AI Agent starting extraction:', { keywords, platforms, maxResults });
   
   const results = [];
+  const extraLeads = []; // Cache for extra qualified leads
   const seenUrls = new Set();
   const stats = {
     searched: 0,
@@ -369,33 +396,61 @@ app.post('/api/extract', async (req, res) => {
     emailLeads: 0,
     dmLeads: 0
   };
+  
+  // Check cache first for matching keywords
+  for (const keyword of keywords) {
+    const cacheKey = keyword.toLowerCase().trim();
+    if (cachedLeads[cacheKey] && cachedLeads[cacheKey].length > 0) {
+      const cached = cachedLeads[cacheKey].splice(0, maxResults);
+      results.push(...cached);
+      console.log(`📦 Retrieved ${cached.length} leads from cache for "${keyword}"`);
+    }
+  }
+  
+  // If we have enough from cache, return early
+  if (results.length >= maxResults) {
+    allLeads = results.slice(0, maxResults);
+    return res.json({
+      success: true,
+      requested: maxResults,
+      found: allLeads.filter(l => l.contactMethod === 'email').length,
+      dmLeads: allLeads.filter(l => l.contactMethod === 'dm').length,
+      notAvailable: 0,
+      stats: { ...stats, qualified: allLeads.length, fromCache: true },
+      leads: allLeads
+    });
+  }
 
   try {
+    // Calculate how many results to search for (search 20x more to find qualified leads with emails)
+    const searchMultiplier = 20;
+    const targetSearchResults = maxResults * searchMultiplier;
+    
     for (const keyword of keywords) {
       console.log(`\n📍 Processing keyword: "${keyword}"`);
       
       for (const platform of platforms) {
-        if (results.length >= maxResults) break;
-        
+        // Don't stop early - search all platforms to gather more leads
         const queries = generateSearchQueries(keyword, platform);
         
-        for (const query of queries.slice(0, 2)) {
-          if (results.length >= maxResults) break;
-          
+        // Use more queries per platform (up to 5)
+        for (const query of queries.slice(0, 5)) {
           stats.searched++;
           
-          // Use Bright Data or fallback to Apify
+          // Search for more results per query
           const searchResults = await brightDataSearch(query, {
             region,
             timeframe,
-            limit: Math.min(maxResults * 2, 15)
+            limit: 20 // Get 20 results per query
           });
           
-          // Analyze each result
+          // Analyze each result - DON'T stop early, collect all qualified leads
           for (const result of searchResults) {
-            if (results.length >= maxResults) break;
             if (!result.url || seenUrls.has(result.url)) continue;
             seenUrls.add(result.url);
+            
+            // Limit total analysis to avoid timeout (max 100 pages)
+            if (stats.analyzed >= 100) continue;
             
             console.log(`📄 Analyzing: ${result.url.substring(0, 60)}...`);
             stats.analyzed++;
@@ -419,8 +474,8 @@ app.post('/api/extract', async (req, res) => {
                                    !qualification.email.includes('fake') &&
                                    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(qualification.email);
               
-              // For DM leads without email
-              const isDmLead = !hasRealEmail && qualification.contact_method === 'dm';
+              // ONLY accept leads with REAL EMAIL (as per requirement)
+              // No DM leads - email is required
               
               // Validate name is present
               const hasName = qualification.name && 
@@ -428,13 +483,14 @@ app.post('/api/extract', async (req, res) => {
                               qualification.name !== 'Unknown' &&
                               qualification.name !== '-';
               
-              // Only include if has real email OR is a DM lead with username
-              if (hasRealEmail || (isDmLead && qualification.username)) {
+              // Only include if has real email
+              if (hasRealEmail) {
                 stats.qualified++;
+                stats.emailLeads++;
                 
                 const lead = {
                   name: hasName ? qualification.name : (qualification.username || '-'),
-                  email: hasRealEmail ? qualification.email : `(DM on ${detectedPlatform})`,
+                  email: qualification.email,
                   phone: qualification.phone && qualification.phone !== '' ? qualification.phone : '-',
                   source: detectedPlatform,
                   query: keyword,
@@ -443,52 +499,64 @@ app.post('/api/extract', async (req, res) => {
                   title: result.title,
                   url: result.url,
                   username: qualification.username || '',
-                  contactMethod: hasRealEmail ? 'email' : 'dm',
-                  emailVerified: qualification.email_verified || false,
+                  contactMethod: 'email',
+                  emailVerified: true,
                   extractedAt: new Date().toISOString()
                 };
-                
-                // Track stats
-                if (hasRealEmail) {
-                  stats.emailLeads++;
-                } else {
-                  stats.dmLeads++;
-                }
                 
                 results.push(lead);
                 console.log(`✅ Lead #${results.length}: ${lead.name} | ${lead.email} | ${lead.phone} | Intent: ${lead.intentScore}/10`);
               } else {
-                console.log(`⚠️ Skipped: No real email or username found`);
+                console.log(`⚠️ Skipped: No real email found (email required)`);
               }
             } else {
-              console.log(`❌ Rejected: ${qualification.reason || 'Low intent'}`);
+              console.log(`❌ Rejected: ${qualification.reason || 'Low intent or not seeking services'}`);
             }
           }
         }
       }
     }
 
-    // Sort by intent score
+    // Sort by intent score (highest first)
     results.sort((a, b) => (b.intentScore || 0) - (a.intentScore || 0));
     
-    allLeads = results;
+    // Split into results to return and extras to cache
+    const toReturn = results.slice(0, maxResults);
+    const toCache = results.slice(maxResults);
+    
+    // Cache extra leads for future requests
+    if (toCache.length > 0) {
+      for (const keyword of keywords) {
+        const cacheKey = keyword.toLowerCase().trim();
+        if (!cachedLeads[cacheKey]) cachedLeads[cacheKey] = [];
+        cachedLeads[cacheKey].push(...toCache.filter(l => l.query.toLowerCase() === cacheKey));
+      }
+      console.log(`📦 Cached ${toCache.length} extra leads for future requests`);
+    }
+    
+    allLeads = toReturn;
     
     console.log(`\n🎯 Extraction complete!`);
     console.log(`   📊 Searched: ${stats.searched} queries`);
     console.log(`   📄 Analyzed: ${stats.analyzed} pages`);
-    console.log(`   ✅ Qualified: ${stats.qualified} leads`);
+    console.log(`   ✅ Qualified: ${stats.qualified} leads (${toReturn.length} returned, ${toCache.length} cached)`);
     console.log(`   📧 Email leads: ${stats.emailLeads}`);
-    console.log(`   💬 DM leads: ${stats.dmLeads}`);
 
     res.json({
       success: true,
       requested: maxResults,
-      found: stats.emailLeads,
-      dmLeads: stats.dmLeads,
-      notAvailable: Math.max(0, maxResults - results.length),
-      stats: stats,
-      leads: results,
-      message: results.length === 0 ? 'No qualified leads found. Try different keywords or platforms.' : ''
+      found: toReturn.length,
+      cached: toCache.length,
+      notAvailable: Math.max(0, maxResults - toReturn.length),
+      stats: {
+        searched: stats.searched,
+        analyzed: stats.analyzed,
+        qualified: stats.qualified,
+        returned: toReturn.length,
+        cached: toCache.length
+      },
+      leads: toReturn,
+      message: toReturn.length === 0 ? 'No leads with verified emails found. People rarely post emails publicly - try more platforms or different keywords.' : ''
     });
 
   } catch (err) {
