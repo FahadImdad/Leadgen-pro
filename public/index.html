@@ -872,55 +872,52 @@ web development</textarea>
   <script>
     let allLeads = [];
     
-    // Update platform visual state
-    function updatePlatformVisual(item, isChecked) {
-      if (isChecked) {
-        item.classList.add('selected');
-        let status = item.querySelector('.platform-status');
+    // Simple platform toggle - just two states: selected or not
+    function syncPlatform(item) {
+      const checkbox = item.querySelector('input');
+      const isSelected = checkbox.checked;
+      
+      // Update visual
+      item.classList.toggle('selected', isSelected);
+      
+      // Update checkmark
+      let status = item.querySelector('.platform-status');
+      if (isSelected) {
         if (!status) {
           status = document.createElement('span');
           status.className = 'platform-status';
           item.appendChild(status);
         }
         status.textContent = '✓';
-      } else {
-        item.classList.remove('selected');
-        const status = item.querySelector('.platform-status');
-        if (status) status.textContent = '';
+      } else if (status) {
+        status.remove();
       }
     }
     
     // Toggle all platforms
     function toggleAllPlatforms() {
-      const checkboxes = document.querySelectorAll('input[name="platform"]');
-      const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+      const items = document.querySelectorAll('.platform-item');
+      const allSelected = Array.from(items).every(item => item.querySelector('input').checked);
       
-      checkboxes.forEach(cb => {
-        cb.checked = !allChecked;
-        updatePlatformVisual(cb.closest('.platform-item'), cb.checked);
+      items.forEach(item => {
+        item.querySelector('input').checked = !allSelected;
+        syncPlatform(item);
       });
       
       // Update button text
       const btn = document.querySelector('.btn-link');
-      if (btn) btn.textContent = allChecked ? 'Select All' : 'Clear All';
+      if (btn) btn.textContent = allSelected ? 'Select All' : 'Clear All';
     }
     
-    // Platform click handler
+    // Initialize platforms - single click handler on label
     document.querySelectorAll('.platform-item').forEach(item => {
-      item.addEventListener('click', (e) => {
-        // Prevent double-firing if clicking directly on checkbox
-        if (e.target.tagName === 'INPUT') return;
-        
-        const checkbox = item.querySelector('input');
-        checkbox.checked = !checkbox.checked;
-        updatePlatformVisual(item, checkbox.checked);
-      });
-      
-      // Also handle direct checkbox change
       const checkbox = item.querySelector('input');
-      checkbox.addEventListener('change', () => {
-        updatePlatformVisual(item, checkbox.checked);
-      });
+      
+      // Sync initial state
+      syncPlatform(item);
+      
+      // Single handler: listen to checkbox change only (label click triggers this)
+      checkbox.addEventListener('change', () => syncPlatform(item));
     });
     
     // Check API status
