@@ -123,22 +123,26 @@ URL: ${url}
 CONTENT:
 ${truncatedContent}
 
-QUALIFICATION RULES:
-✅ QUALIFY (is_lead: true) ONLY IF:
-- Post tagged [HIRING] or [Hiring] - someone PAYING for work
-- Person asking "I need...", "looking for someone...", "can anyone help..."
-- Person willing to PAY for services
-- Seeking recommendations for hiring a professional
+QUALIFICATION RULES - BE VERY STRICT:
 
-❌ REJECT (is_lead: false) IF:
-- Post tagged [FOR HIRE] or [For Hire] - these are people OFFERING services (REJECT!)
-- Company/agency ADVERTISING their services (REJECT!)
-- Portfolio, showcase, or self-promotion (REJECT!)
-- Tutorial, guide, how-to article (REJECT!)
-- Job posting for full-time employees (REJECT!)
+✅ QUALIFY (is_lead: true) ONLY IF ALL are true:
+- An INDIVIDUAL person (not a company)
+- SEEKING/LOOKING to hire someone
+- Post says "I need...", "looking for someone to...", "can anyone help me..."
+- They have a PROJECT they need help with
+- Tagged [HIRING] or asking for recommendations
 
-CRITICAL: [FOR HIRE] means they OFFER services = REJECT!
-         [HIRING] means they NEED services = ACCEPT!
+❌ REJECT (is_lead: false) - MUST REJECT IF ANY of these:
+- Contains "We offer", "Our services", "Reach out", "Contact us" = COMPANY ADVERTISING
+- Contains company name (Ltd, LLC, Inc, Agency, Studio, Publishers) = REJECT
+- Contains hashtags (#) = MARKETING POST = REJECT
+- Contains "[For Hire]" = Someone offering services = REJECT
+- Contains prices like "$X/hr" or "starting at" = SERVICE PROVIDER = REJECT
+- Contains "years of experience", "my portfolio" = SELF PROMOTION = REJECT
+- Tutorial, guide, how-to = CONTENT = REJECT
+
+CRITICAL: Most search results are COMPANIES ADVERTISING. Reject them all!
+We want INDIVIDUALS who need help with THEIR OWN project.
 
 DATA EXTRACTION RULES (CRITICAL):
 1. NAME (required): Extract the real name of the person who posted. If not visible, use username without prefixes.
@@ -200,25 +204,45 @@ IMPORTANT: Never invent or guess email/phone. Only extract what's actually visib
 function fallbackQualification(content, url) {
   const lower = content.toLowerCase();
   
-  // Bad patterns (reject) - people OFFERING services
+  // Bad patterns (reject) - companies/people OFFERING services
   const badPatterns = [
+    // Service providers
     '[for hire]', 'for hire', 'offering services', 'available for',
+    'we offer', 'we provide', 'our services', 'our team', 'our company',
+    'reach out', 'contact us', 'get in touch', 'book a call',
+    'starting at', 'prices from', 'affordable rates',
+    'hire me', 'my portfolio', 'check out my', 'years of experience',
+    // Marketing/promo
+    '#', 'hashtag', 'follow us', 'like and share',
+    // Content
     'how to ', 'guide to', 'tutorial', 'step by step', 'tips for',
-    'faq', 'our services', 'we offer', 'contact us', 'about us',
-    'pricing', 'packages', 'copyright ©', 'privacy policy',
-    'my portfolio', 'check out my', 'hire me'
+    'faq', 'about us', 'pricing', 'packages', 'copyright',
+    // Company indicators
+    'ltd', 'llc', 'inc', 'agency', 'studio', 'publishing house',
+    'publishers', 'services:', 'consultancy'
   ];
   
-  // Good patterns (seeking help) - people HIRING/LOOKING
+  // Good patterns (seeking help) - INDIVIDUALS looking to BUY
   const goodPatterns = [
-    '[hiring]', 'hiring', 'looking for someone', 'need someone',
-    'i need', 'looking for', 'can anyone', 'help me', 'recommend',
-    'seeking', 'my project', 'my book', 'my website', 'dm me',
-    'budget', 'pay', 'willing to pay'
+    '[hiring]', 'i am looking', 'i need help', 'need someone to',
+    'can anyone help', 'looking for a freelancer', 'my manuscript',
+    'my book', 'my novel', 'my story', 'written a book', 'wrote a book',
+    'want to publish', 'help me publish', 'self-publish',
+    'budget is', 'willing to pay', 'what would it cost'
   ];
   
   const hasBad = badPatterns.some(p => lower.includes(p));
   const hasGood = goodPatterns.some(p => lower.includes(p));
+  
+  // If has bad patterns, reject immediately
+  if (hasBad) {
+    return {
+      is_lead: false,
+      name: '', email: '', phone: '-', username: '',
+      intent: '', intent_score: 1, contact_method: 'none',
+      reason: 'Service provider or marketing content'
+    };
+  }
   
   // Extract REAL email only (personal domains)
   const emailMatch = content.match(/[a-zA-Z0-9._%+-]+@(gmail|yahoo|hotmail|outlook|icloud|aol)\.(com|net|org)/i);
