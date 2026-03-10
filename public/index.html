@@ -829,12 +829,26 @@ web development</textarea>
           <p style="margin-top: 10px;">Configure your settings above and click "Start Extraction"</p>
         </div>
         
-        <div id="loadingState" class="empty-state hidden">
-          <div class="loading-spinner"></div>
-          <div class="loading-progress" id="loadingProgress">0/5 leads</div>
-          <div class="loading-text" id="loadingText">Starting search...</div>
-          <div class="loading-details" id="loadingDetails" style="margin-top: 20px; padding: 15px; background: var(--bg-input); border-radius: 10px; font-size: 0.85rem; color: var(--text-muted); max-height: 150px; overflow-y: auto; text-align: left;">
-            <div>⏳ Initializing AI agent...</div>
+        <div id="loadingState" class="empty-state hidden" style="max-width: 100%; padding: 20px;">
+          <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px;">
+            <div class="loading-spinner"></div>
+            <div>
+              <div class="loading-progress" id="loadingProgress" style="margin: 0;">0/5 leads</div>
+              <div class="loading-text" id="loadingText" style="font-size: 0.9rem;">Starting search...</div>
+            </div>
+          </div>
+          
+          <!-- Live Activity Console -->
+          <div style="background: #0d1117; border-radius: 12px; padding: 15px; text-align: left; font-family: 'Monaco', 'Consolas', monospace; font-size: 0.8rem;">
+            <div style="display: flex; gap: 8px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #30363d;">
+              <span style="width: 12px; height: 12px; border-radius: 50%; background: #ff5f56;"></span>
+              <span style="width: 12px; height: 12px; border-radius: 50%; background: #ffbd2e;"></span>
+              <span style="width: 12px; height: 12px; border-radius: 50%; background: #27ca40;"></span>
+              <span style="margin-left: 10px; color: #8b949e; font-size: 0.75rem;">LeadGen AI Console</span>
+            </div>
+            <div id="loadingDetails" style="max-height: 200px; overflow-y: auto; line-height: 1.8;">
+              <div style="color: #8b949e;">$ Initializing AI agent...</div>
+            </div>
           </div>
         </div>
         
@@ -913,19 +927,40 @@ web development</textarea>
       checkbox.addEventListener('change', () => syncPlatform(item));
     });
     
-    // Activity log for transparency
-    function addActivityLog(message) {
+    // Activity log for transparency - terminal style
+    function addActivityLog(message, type = 'info') {
       const log = document.getElementById('loadingDetails');
       if (!log) return;
+      
+      const colors = {
+        'brightdata': '#58a6ff',  // Blue for Bright Data
+        'ai': '#a371f7',          // Purple for AI
+        'success': '#3fb950',     // Green for success
+        'info': '#8b949e',        // Gray for info
+        'search': '#f0883e'       // Orange for search
+      };
+      
+      const icons = {
+        'brightdata': '⚡',
+        'ai': '🤖',
+        'success': '✅',
+        'info': '→',
+        'search': '🔍'
+      };
+      
       const entry = document.createElement('div');
-      entry.innerHTML = message;
-      entry.style.borderBottom = '1px solid var(--border)';
-      entry.style.padding = '5px 0';
+      entry.style.color = colors[type] || colors.info;
+      entry.style.padding = '2px 0';
+      entry.innerHTML = `<span style="opacity: 0.5;">${new Date().toLocaleTimeString()}</span> ${icons[type] || '→'} ${message}`;
       log.insertBefore(entry, log.firstChild);
-      // Keep only last 20 entries
-      while (log.children.length > 20) {
+      
+      // Keep only last 30 entries
+      while (log.children.length > 30) {
         log.removeChild(log.lastChild);
       }
+      
+      // Auto scroll to top
+      log.scrollTop = 0;
     }
     
     // Check API status
@@ -1009,16 +1044,25 @@ web development</textarea>
           if (data.type === 'progress') {
             document.getElementById('loadingText').textContent = data.message;
             document.getElementById('loadingProgress').textContent = `${data.found}/${data.total} leads`;
-            // Add to activity log
-            addActivityLog(data.message);
+            
+            // Determine log type based on message content
+            let logType = 'info';
+            if (data.message.includes('Searching')) logType = 'search';
+            else if (data.message.includes('Found') && data.message.includes('results')) logType = 'brightdata';
+            else if (data.message.includes('AI analyzing')) logType = 'ai';
+            
+            addActivityLog(data.message.replace(/^[🔍📄🤖✅]\s*/, ''), logType);
           }
           
           if (data.type === 'lead') {
             document.getElementById('loadingText').textContent = `✅ Found: ${data.lead.name}`;
             document.getElementById('loadingProgress').textContent = `${data.found}/${data.total} leads`;
             document.getElementById('resultsCount').textContent = data.found;
-            // Add to activity log with highlight
-            addActivityLog(`✅ <span style="color: var(--success);">LEAD FOUND: ${data.lead.name} (${data.lead.email})</span>`);
+            
+            // Add lead found with details
+            addActivityLog(`LEAD QUALIFIED: ${data.lead.name}`, 'success');
+            addActivityLog(`↳ Email: ${data.lead.email}`, 'success');
+            addActivityLog(`↳ Intent Score: ${data.lead.intentScore}/10`, 'success');
           }
           
           if (data.type === 'complete') {

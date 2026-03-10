@@ -458,9 +458,19 @@ app.get('/api/extract-stream', async (req, res) => {
               sendProgress(results.length, max, `🤖 AI analyzing: ${shortUrl}...`);
               
               const { text } = await fetchPageContent(result.url);
-              if (!text || text.length < 100) continue;
+              if (!text || text.length < 100) {
+                sendProgress(results.length, max, `⚠️ Skipped: Page too short or empty`);
+                continue;
+              }
               
+              sendProgress(results.length, max, `🤖 AI Agent: Checking if post is someone seeking "${keyword}" services...`);
               const qualification = await qualifyLead(text, result.url, keyword);
+              
+              if (!qualification.is_lead) {
+                sendProgress(results.length, max, `❌ Rejected: ${qualification.reason || 'Not a potential customer'}`);
+              } else if (qualification.intent_score < 5) {
+                sendProgress(results.length, max, `⚠️ Low intent (${qualification.intent_score}/10): Skipping`);
+              }
               
               if (qualification.is_lead && qualification.intent_score >= 5) {
                 const detectedPlatform = detectPlatform(result.url);
