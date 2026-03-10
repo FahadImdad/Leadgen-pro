@@ -872,6 +872,24 @@ web development</textarea>
   <script>
     let allLeads = [];
     
+    // Update platform visual state
+    function updatePlatformVisual(item, isChecked) {
+      if (isChecked) {
+        item.classList.add('selected');
+        let status = item.querySelector('.platform-status');
+        if (!status) {
+          status = document.createElement('span');
+          status.className = 'platform-status';
+          item.appendChild(status);
+        }
+        status.textContent = '✓';
+      } else {
+        item.classList.remove('selected');
+        const status = item.querySelector('.platform-status');
+        if (status) status.textContent = '';
+      }
+    }
+    
     // Toggle all platforms
     function toggleAllPlatforms() {
       const checkboxes = document.querySelectorAll('input[name="platform"]');
@@ -879,16 +897,7 @@ web development</textarea>
       
       checkboxes.forEach(cb => {
         cb.checked = !allChecked;
-        const item = cb.closest('.platform-item');
-        item.classList.toggle('selected', cb.checked);
-        const status = item.querySelector('.platform-status');
-        if (status) status.textContent = cb.checked ? '✓' : '';
-        if (!status && cb.checked) {
-          const statusSpan = document.createElement('span');
-          statusSpan.className = 'platform-status';
-          statusSpan.textContent = '✓';
-          item.appendChild(statusSpan);
-        }
+        updatePlatformVisual(cb.closest('.platform-item'), cb.checked);
       });
       
       // Update button text
@@ -896,22 +905,21 @@ web development</textarea>
       if (btn) btn.textContent = allChecked ? 'Select All' : 'Clear All';
     }
     
-    // Platform checkbox styling
+    // Platform click handler
     document.querySelectorAll('.platform-item').forEach(item => {
+      item.addEventListener('click', (e) => {
+        // Prevent double-firing if clicking directly on checkbox
+        if (e.target.tagName === 'INPUT') return;
+        
+        const checkbox = item.querySelector('input');
+        checkbox.checked = !checkbox.checked;
+        updatePlatformVisual(item, checkbox.checked);
+      });
+      
+      // Also handle direct checkbox change
       const checkbox = item.querySelector('input');
       checkbox.addEventListener('change', () => {
-        item.classList.toggle('selected', checkbox.checked);
-        let status = item.querySelector('.platform-status');
-        if (checkbox.checked) {
-          if (!status) {
-            status = document.createElement('span');
-            status.className = 'platform-status';
-            item.appendChild(status);
-          }
-          status.textContent = '✓';
-        } else if (status) {
-          status.textContent = '';
-        }
+        updatePlatformVisual(item, checkbox.checked);
       });
     });
     
