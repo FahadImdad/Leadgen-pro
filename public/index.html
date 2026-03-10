@@ -402,53 +402,40 @@
     .badge-upwork { background: #6fda4422; color: #4ade80; }
     .badge-fiverr { background: #1dbf7322; color: #34d399; }
     
-    /* Loading State - Compact floating card */
+    /* Loading State - Inline in results area */
     .loading-overlay {
-      position: fixed;
-      bottom: 30px;
-      right: 30px;
-      background: var(--bg-card);
-      border: 1px solid var(--primary);
-      border-radius: 16px;
-      padding: 20px 30px;
-      display: flex;
-      align-items: center;
-      gap: 20px;
-      z-index: 100;
-      box-shadow: 0 10px 40px rgba(0,0,0,0.4);
-      max-width: 350px;
+      display: none;
+    }
+    
+    .loading-inline {
+      text-align: center;
+      padding: 40px 20px;
     }
     
     .loading-spinner {
-      width: 40px;
-      height: 40px;
-      border: 3px solid var(--border);
+      width: 50px;
+      height: 50px;
+      border: 4px solid var(--border);
       border-top-color: var(--primary);
       border-radius: 50%;
       animation: spin 1s linear infinite;
-      flex-shrink: 0;
+      margin: 0 auto 20px;
     }
     
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
     
-    .loading-content {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
+    .loading-progress {
+      font-size: 2rem;
+      color: var(--primary);
+      font-weight: 700;
+      margin-bottom: 10px;
     }
     
     .loading-text {
-      font-size: 0.95rem;
-      color: var(--text);
-      font-weight: 500;
-    }
-    
-    .loading-progress {
-      font-size: 1.1rem;
-      color: var(--primary);
-      font-weight: 700;
+      font-size: 1rem;
+      color: var(--text-muted);
     }
     
     .hidden { display: none !important; }
@@ -583,12 +570,8 @@
         padding: 10px 12px;
       }
       
-      .loading-overlay {
-        bottom: 15px;
-        right: 15px;
-        left: 15px;
-        max-width: none;
-        padding: 15px 20px;
+      .loading-progress {
+        font-size: 1.5rem;
       }
       
       /* Mobile API status - show at top */
@@ -846,6 +829,12 @@ web development</textarea>
           <p style="margin-top: 10px;">Configure your settings above and click "Start Extraction"</p>
         </div>
         
+        <div id="loadingState" class="empty-state hidden">
+          <div class="loading-spinner"></div>
+          <div class="loading-progress" id="loadingProgress">0/5 leads</div>
+          <div class="loading-text" id="loadingText">Starting search...</div>
+        </div>
+        
         <div class="table-container hidden" id="tableContainer">
           <table>
             <thead>
@@ -868,13 +857,7 @@ web development</textarea>
   </main>
   
   <!-- Loading Overlay -->
-  <div class="loading-overlay hidden" id="loadingOverlay">
-    <div class="loading-spinner"></div>
-    <div class="loading-content">
-      <div class="loading-progress" id="loadingProgress">0/5 leads</div>
-      <div class="loading-text" id="loadingText">Starting search...</div>
-    </div>
-  </div>
+  <!-- Loading handled inline in empty state -->
   
   <script>
     let allLeads = [];
@@ -982,8 +965,10 @@ web development</textarea>
         return;
       }
       
-      // Show loading
-      document.getElementById('loadingOverlay').classList.remove('hidden');
+      // Show loading inline
+      document.getElementById('emptyState').classList.add('hidden');
+      document.getElementById('tableContainer').classList.add('hidden');
+      document.getElementById('loadingState').classList.remove('hidden');
       document.getElementById('extractBtn').disabled = true;
       document.getElementById('loadingText').textContent = '🔍 Starting search...';
       document.getElementById('loadingProgress').textContent = '0/' + maxResults + ' leads';
@@ -1005,42 +990,44 @@ web development</textarea>
           
           if (data.type === 'progress') {
             document.getElementById('loadingText').textContent = data.message;
-            document.getElementById('loadingProgress').textContent = `${data.found}/${data.total} leads found`;
+            document.getElementById('loadingProgress').textContent = `${data.found}/${data.total} leads`;
           }
           
           if (data.type === 'lead') {
-            document.getElementById('loadingText').textContent = `✅ Found lead: ${data.lead.name}`;
-            document.getElementById('loadingProgress').textContent = `${data.found}/${data.total} leads found`;
-            // Update results count live
+            document.getElementById('loadingText').textContent = `✅ Found: ${data.lead.name}`;
+            document.getElementById('loadingProgress').textContent = `${data.found}/${data.total} leads`;
             document.getElementById('resultsCount').textContent = data.found;
           }
           
           if (data.type === 'complete') {
             eventSource.close();
             allLeads = data.leads;
+            document.getElementById('loadingState').classList.add('hidden');
             displayResults(data.leads);
             updateStats({ success: true, ...data.stats, leads: data.leads });
-            document.getElementById('loadingOverlay').classList.add('hidden');
             document.getElementById('extractBtn').disabled = false;
           }
           
           if (data.type === 'error') {
             eventSource.close();
             alert('Error: ' + data.error);
-            document.getElementById('loadingOverlay').classList.add('hidden');
+            document.getElementById('loadingState').classList.add('hidden');
+            document.getElementById('emptyState').classList.remove('hidden');
             document.getElementById('extractBtn').disabled = false;
           }
         };
         
         eventSource.onerror = () => {
           eventSource.close();
-          document.getElementById('loadingOverlay').classList.add('hidden');
+          document.getElementById('loadingState').classList.add('hidden');
+          document.getElementById('emptyState').classList.remove('hidden');
           document.getElementById('extractBtn').disabled = false;
         };
         
       } catch (err) {
         alert('Error: ' + err.message);
-        document.getElementById('loadingOverlay').classList.add('hidden');
+        document.getElementById('loadingState').classList.add('hidden');
+        document.getElementById('emptyState').classList.remove('hidden');
         document.getElementById('extractBtn').disabled = false;
       }
     }
