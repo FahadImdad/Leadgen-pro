@@ -213,13 +213,97 @@ function fallbackQualification(content, url, keyword = '') {
   const lower = content.toLowerCase();
   const keywordLower = keyword.toLowerCase();
   
-  // REJECT EVERYTHING IN FALLBACK - Only Gemini AI should qualify
-  // Fallback = Gemini failed = not trustworthy = REJECT
+  // Check keyword relevance
+  const keywordWords = keywordLower.split(' ').filter(w => w.length > 2);
+  const hasKeyword = keywordWords.some(word => lower.includes(word));
+  if (!hasKeyword) {
+    return { is_lead: false, reason: 'Not relevant to keyword' };
+  }
+  
+  // STRICT REJECTION patterns - companies/service providers
+  const rejectPatterns = [
+    'we offer', 'our services', 'contact us', 'reach out',
+    'available for hire', 'hire me', 'my portfolio',
+    'years of experience', 'professional services',
+    'publishing house', 'publishing company', 'our team',
+    'starting at', 'prices from', 'get a quote',
+    'ltd', 'llc', 'inc.', 'agency',
+    '#bookpublishing', '#author', '#selfpublish',
+    'million books', 'worldwide', '📚✨'
+  ];
+  
+  if (rejectPatterns.some(p => lower.includes(p))) {
+    return { is_lead: false, reason: 'Service provider or company' };
+  }
+  
+  // MUST have seeking patterns
+  const seekingPatterns = [
+    'i need help', 'i need someone', 'looking for someone',
+    'can anyone help', 'can anyone recommend',
+    '[hiring]', 'hiring:', 'want to hire',
+    'my manuscript', 'my book', 'i wrote', "i've written",
+    'help me publish', 'need a publisher', 'looking for publisher'
+  ];
+  
+  const isSeeking = seekingPatterns.some(p => lower.includes(p));
+  if (!isSeeking) {
+    return { is_lead: false, reason: 'No clear intent to hire' };
+  }
+  
+  // Extract ALL emails (not just personal)
+  const emailMatches = content.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/gi) || [];
+  const validEmails = emailMatches.filter(e => 
+    !e.includes('example') && !e.includes('test') && 
+    !e.includes('noreply') && !e.includes('no-reply') &&
+    e.length > 5 && e.length < 50
+  );
+  const email = validEmails[0] ? validEmails[0].toLowerCase() : '';
+  
+  // Extract username/name from URL and content
+  let username = '';
+  let name = '';
+  
+  if (url.includes('reddit.com')) {
+    // Reddit: extract from URL path
+    const postMatch = url.match(/comments\/[^\/]+\/([^\/]+)/);
+    if (postMatch) username = postMatch[1].replace(/_/g, ' ').substring(0, 30);
+    // Try to get actual username
+    const authorMatch = content.match(/u\/([a-zA-Z0-9_-]+)/);
+    if (authorMatch) name = authorMatch[1];
+  } else if (url.includes('facebook.com')) {
+    // Facebook: extract name from URL
+    const fbMatch = url.match(/facebook\.com\/([^\/]+)/);
+    if (fbMatch && !['groups', 'pages', 'posts'].includes(fbMatch[1])) {
+      name = fbMatch[1].replace(/\./g, ' ');
+    }
+  } else if (url.includes('quora.com')) {
+    // Quora: extract from content
+    const quoraMatch = content.match(/asked by ([^,\n]+)/i);
+    if (quoraMatch) name = quoraMatch[1].trim();
+    username = 'Quora User';
+  } else if (url.includes('twitter.com') || url.includes('x.com')) {
+    const twitterMatch = url.match(/(?:twitter|x)\.com\/([^\/\?]+)/);
+    if (twitterMatch) name = '@' + twitterMatch[1];
+  }
+  
+  // Build contact info
+  let contactInfo = email;
+  if (!email && (name || username)) {
+    contactInfo = `DM: ${name || username}`;
+  } else if (!email) {
+    contactInfo = 'Visit Link';
+  }
+  
   return {
-    is_lead: false,
-    name: '', email: '', phone: '-', username: '',
-    intent: '', intent_score: 1, contact_method: 'none',
-    reason: 'AI qualification required - fallback rejected'
+    is_lead: true,
+    name: name || username || 'Lead',
+    email: contactInfo,
+    phone: '-',
+    username: name || username || '',
+    intent: content.substring(0, 100),
+    intent_score: email ? 8 : 6,
+    contact_method: email ? 'email' : 'dm',
+    reason: 'Pattern match - seeking help'
   };
 }
 
