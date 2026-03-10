@@ -439,9 +439,11 @@ app.get('/api/extract-stream', async (req, res) => {
             if (results.length >= max) break;
             
             stats.searched++;
-            sendProgress(results.length, max, `Searching ${platform}...`);
+            sendProgress(results.length, max, `🔍 Searching ${platform.charAt(0).toUpperCase() + platform.slice(1)} for "${keyword}"...`);
             
             const searchResults = await brightDataSearch(query, { region, timeframe, limit: 20 });
+            
+            sendProgress(results.length, max, `📄 Found ${searchResults.length} results on ${platform.charAt(0).toUpperCase() + platform.slice(1)}`);
             
             for (const result of searchResults) {
               if (results.length >= max) break;
@@ -451,7 +453,9 @@ app.get('/api/extract-stream', async (req, res) => {
               if (stats.analyzed >= 50 * stats.loops) continue;
               stats.analyzed++;
               
-              sendProgress(results.length, max, `Analyzing page ${stats.analyzed}...`);
+              // Show what page we're analyzing
+              const shortUrl = result.url.replace(/https?:\/\/(www\.)?/, '').substring(0, 40);
+              sendProgress(results.length, max, `🤖 AI analyzing: ${shortUrl}...`);
               
               const { text } = await fetchPageContent(result.url);
               if (!text || text.length < 100) continue;

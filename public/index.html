@@ -833,6 +833,9 @@ web development</textarea>
           <div class="loading-spinner"></div>
           <div class="loading-progress" id="loadingProgress">0/5 leads</div>
           <div class="loading-text" id="loadingText">Starting search...</div>
+          <div class="loading-details" id="loadingDetails" style="margin-top: 20px; padding: 15px; background: var(--bg-input); border-radius: 10px; font-size: 0.85rem; color: var(--text-muted); max-height: 150px; overflow-y: auto; text-align: left;">
+            <div>⏳ Initializing AI agent...</div>
+          </div>
         </div>
         
         <div class="table-container hidden" id="tableContainer">
@@ -909,6 +912,21 @@ web development</textarea>
       // Single handler: listen to checkbox change only (label click triggers this)
       checkbox.addEventListener('change', () => syncPlatform(item));
     });
+    
+    // Activity log for transparency
+    function addActivityLog(message) {
+      const log = document.getElementById('loadingDetails');
+      if (!log) return;
+      const entry = document.createElement('div');
+      entry.innerHTML = message;
+      entry.style.borderBottom = '1px solid var(--border)';
+      entry.style.padding = '5px 0';
+      log.insertBefore(entry, log.firstChild);
+      // Keep only last 20 entries
+      while (log.children.length > 20) {
+        log.removeChild(log.lastChild);
+      }
+    }
     
     // Check API status
     async function checkStatus() {
@@ -991,12 +1009,16 @@ web development</textarea>
           if (data.type === 'progress') {
             document.getElementById('loadingText').textContent = data.message;
             document.getElementById('loadingProgress').textContent = `${data.found}/${data.total} leads`;
+            // Add to activity log
+            addActivityLog(data.message);
           }
           
           if (data.type === 'lead') {
             document.getElementById('loadingText').textContent = `✅ Found: ${data.lead.name}`;
             document.getElementById('loadingProgress').textContent = `${data.found}/${data.total} leads`;
             document.getElementById('resultsCount').textContent = data.found;
+            // Add to activity log with highlight
+            addActivityLog(`✅ <span style="color: var(--success);">LEAD FOUND: ${data.lead.name} (${data.lead.email})</span>`);
           }
           
           if (data.type === 'complete') {
