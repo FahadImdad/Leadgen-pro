@@ -50,6 +50,9 @@ async function brightDataSearch(query, options = {}) {
     
     console.log(`🔍 Bright Data SERP: ${query.substring(0, 50)}...`);
     
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    
     const response = await fetch('https://api.brightdata.com/request', {
       method: 'POST',
       headers: {
@@ -60,8 +63,11 @@ async function brightDataSearch(query, options = {}) {
         zone: 'serp_api1',
         url: url,
         format: 'json'
-      })
+      }),
+      signal: controller.signal
     });
+    
+    clearTimeout(timeout);
     
     if (!response.ok) {
       const errText = await response.text();
@@ -118,18 +124,21 @@ CONTENT:
 ${truncatedContent}
 
 QUALIFICATION RULES:
-✅ QUALIFY (is_lead: true) ONLY IF person is:
-- Asking for help with THEIR OWN project
-- Seeking recommendations or advice for hiring
-- Willing to PAY for services
-- Posts like "I need help with...", "looking for someone to...", "can anyone recommend..."
+✅ QUALIFY (is_lead: true) ONLY IF:
+- Post tagged [HIRING] or [Hiring] - someone PAYING for work
+- Person asking "I need...", "looking for someone...", "can anyone help..."
+- Person willing to PAY for services
+- Seeking recommendations for hiring a professional
 
 ❌ REJECT (is_lead: false) IF:
-- Company/agency OFFERING services
-- Tutorial, guide, how-to article, blog post
-- Job posting for employees
-- News article, review, FAQ page
-- Someone sharing their own work/portfolio
+- Post tagged [FOR HIRE] or [For Hire] - these are people OFFERING services (REJECT!)
+- Company/agency ADVERTISING their services (REJECT!)
+- Portfolio, showcase, or self-promotion (REJECT!)
+- Tutorial, guide, how-to article (REJECT!)
+- Job posting for full-time employees (REJECT!)
+
+CRITICAL: [FOR HIRE] means they OFFER services = REJECT!
+         [HIRING] means they NEED services = ACCEPT!
 
 DATA EXTRACTION RULES (CRITICAL):
 1. NAME (required): Extract the real name of the person who posted. If not visible, use username without prefixes.
@@ -191,17 +200,21 @@ IMPORTANT: Never invent or guess email/phone. Only extract what's actually visib
 function fallbackQualification(content, url) {
   const lower = content.toLowerCase();
   
-  // Bad patterns (reject)
+  // Bad patterns (reject) - people OFFERING services
   const badPatterns = [
+    '[for hire]', 'for hire', 'offering services', 'available for',
     'how to ', 'guide to', 'tutorial', 'step by step', 'tips for',
     'faq', 'our services', 'we offer', 'contact us', 'about us',
-    'pricing', 'packages', 'copyright ©', 'privacy policy'
+    'pricing', 'packages', 'copyright ©', 'privacy policy',
+    'my portfolio', 'check out my', 'hire me'
   ];
   
-  // Good patterns (seeking help)
+  // Good patterns (seeking help) - people HIRING/LOOKING
   const goodPatterns = [
+    '[hiring]', 'hiring', 'looking for someone', 'need someone',
     'i need', 'looking for', 'can anyone', 'help me', 'recommend',
-    'seeking', 'hire', 'my project', 'my book', 'my website', 'dm me'
+    'seeking', 'my project', 'my book', 'my website', 'dm me',
+    'budget', 'pay', 'willing to pay'
   ];
   
   const hasBad = badPatterns.some(p => lower.includes(p));
@@ -270,13 +283,21 @@ function fallbackQualification(content, url) {
 // PAGE SCRAPER
 // ============================================================
 async function fetchPageContent(url) {
+  // Convert Reddit URLs to old.reddit.com (less blocking)
+  let fetchUrl = url;
+  if (url.includes('reddit.com') && !url.includes('old.reddit.com')) {
+    fetchUrl = url.replace('www.reddit.com', 'old.reddit.com').replace('reddit.com', 'old.reddit.com');
+  }
+  
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
+    const timeout = setTimeout(() => controller.abort(), 8000);
     
-    const response = await fetch(url, {
+    const response = await fetch(fetchUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+        'Accept': 'text/html',
+        'Accept-Language': 'en-US,en;q=0.9'
       },
       signal: controller.signal
     });
@@ -284,7 +305,6 @@ async function fetchPageContent(url) {
     clearTimeout(timeout);
     const html = await response.text();
     
-    // Strip HTML tags, get plain text
     const text = html
       .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
       .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
@@ -294,7 +314,7 @@ async function fetchPageContent(url) {
     
     return { text, html };
   } catch (err) {
-    console.log('Fetch error for', url.substring(0, 50), ':', err.message);
+    console.log('Fetch error:', err.message);
     return { text: '', html: '' };
   }
 }
@@ -470,25 +490,24 @@ app.get('/api/extract-stream', async (req, res) => {
               if (stats.analyzed >= 15 * stats.loops) continue;
               stats.analyzed++;
               
-              // Show what page we're analyzing
-              const shortUrl = result.url.replace(/https?:\/\/(www\.)?/, '').substring(0, 40);
-              sendProgress(results.length, max, `🤖 AI analyzing: ${shortUrl}...`);
-              
-              const { text } = await fetchPageContent(result.url);
-              if (!text || text.length < 100) {
-                sendProgress(results.length, max, `⚠️ Skipped: Page too short or empty`);
+              // Use search result snippet directly (no page scraping needed)
+              const content = `${result.title || ''} ${result.snippet || ''}`;
+              if (!content || content.length < 20) {
                 continue;
               }
               
-              // Show page content preview
-              const contentPreview = text.substring(0, 100).replace(/\s+/g, ' ').trim();
-              sendProgress(results.length, max, `📄 Page content: "${contentPreview}..."`);
+              // Show what we're analyzing
+              const shortUrl = result.url.replace(/https?:\/\/(www\.)?/, '').substring(0, 40);
+              sendProgress(results.length, max, `🤖 AI analyzing: ${shortUrl}...`);
+              
+              // Show snippet preview
+              const contentPreview = content.substring(0, 100).replace(/\s+/g, ' ').trim();
+              sendProgress(results.length, max, `📄 Content: "${contentPreview}..."`);
               
               sendProgress(results.length, max, `🤖 AI AGENT: Analyzing with Gemini AI...`);
               sendProgress(results.length, max, `   → Checking if this is someone seeking "${keyword}" services`);
-              sendProgress(results.length, max, `   → Looking for contact info (email, phone, username)`);
               
-              const qualification = await qualifyLead(text, result.url, keyword);
+              const qualification = await qualifyLead(content, result.url, keyword);
               
               // Show AI decision
               sendProgress(results.length, max, `🤖 AI DECISION:`);
@@ -504,23 +523,26 @@ app.get('/api/extract-stream', async (req, res) => {
                 sendProgress(results.length, max, `⚠️ SKIPPED: Low intent score (${qualification.intent_score}/10)`);
               }
               
-              if (qualification.is_lead && qualification.intent_score >= 5) {
+              if (qualification.is_lead && qualification.intent_score >= 4) {
                 const detectedPlatform = detectPlatform(result.url);
                 const hasRealEmail = qualification.email && 
                   qualification.email.includes('@') && 
                   /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(qualification.email);
-                const isDmLead = !hasRealEmail && qualification.username;
                 
-                if (hasRealEmail || isDmLead) {
+                // Accept ALL qualified leads - user can click link to contact
+                if (true) {
                   stats.qualified++;
                   
+                  const contactInfo = hasRealEmail ? qualification.email : 
+                    (qualification.username ? `DM: ${qualification.username}` : 'Visit Link');
+                  
                   const lead = {
-                    name: qualification.name || qualification.username || '-',
-                    email: hasRealEmail ? qualification.email : 'With DM Me',
+                    name: qualification.name || qualification.username || result.title?.substring(0, 30) || 'Lead',
+                    email: contactInfo,
                     phone: qualification.phone || '-',
                     source: detectedPlatform,
                     query: keyword,
-                    intent: qualification.intent || '',
+                    intent: qualification.intent || result.snippet?.substring(0, 100) || '',
                     intentScore: qualification.intent_score,
                     url: result.url,
                     username: qualification.username || '',
