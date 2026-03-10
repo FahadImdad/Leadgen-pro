@@ -723,7 +723,10 @@ web development</textarea>
       
       <!-- Platforms Card -->
       <div class="card">
-        <div class="card-title">📱 Platforms</div>
+        <div class="card-title" style="display: flex; justify-content: space-between; align-items: center;">
+          <span>📱 Platforms</span>
+          <button type="button" onclick="toggleAllPlatforms()" class="btn-link" style="font-size: 0.8rem; color: var(--primary); background: none; border: none; cursor: pointer;">Select All</button>
+        </div>
         <div class="platform-grid">
           <label class="platform-item selected">
             <input type="checkbox" name="platform" value="google" checked>
@@ -738,6 +741,16 @@ web development</textarea>
             <span class="platform-status">✓</span>
           </label>
           <label class="platform-item">
+            <input type="checkbox" name="platform" value="twitter">
+            <span class="platform-icon">🐦</span>
+            <span class="platform-name">Twitter</span>
+          </label>
+          <label class="platform-item">
+            <input type="checkbox" name="platform" value="linkedin">
+            <span class="platform-icon">💼</span>
+            <span class="platform-name">LinkedIn</span>
+          </label>
+          <label class="platform-item">
             <input type="checkbox" name="platform" value="facebook">
             <span class="platform-icon">📘</span>
             <span class="platform-name">Facebook</span>
@@ -748,14 +761,9 @@ web development</textarea>
             <span class="platform-name">Instagram</span>
           </label>
           <label class="platform-item">
-            <input type="checkbox" name="platform" value="twitter">
-            <span class="platform-icon">🐦</span>
-            <span class="platform-name">Twitter</span>
-          </label>
-          <label class="platform-item">
-            <input type="checkbox" name="platform" value="linkedin">
-            <span class="platform-icon">💼</span>
-            <span class="platform-name">LinkedIn</span>
+            <input type="checkbox" name="platform" value="quora">
+            <span class="platform-icon">❓</span>
+            <span class="platform-name">Quora</span>
           </label>
           <label class="platform-item">
             <input type="checkbox" name="platform" value="upwork">
@@ -864,13 +872,46 @@ web development</textarea>
   <script>
     let allLeads = [];
     
+    // Toggle all platforms
+    function toggleAllPlatforms() {
+      const checkboxes = document.querySelectorAll('input[name="platform"]');
+      const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+      
+      checkboxes.forEach(cb => {
+        cb.checked = !allChecked;
+        const item = cb.closest('.platform-item');
+        item.classList.toggle('selected', cb.checked);
+        const status = item.querySelector('.platform-status');
+        if (status) status.textContent = cb.checked ? '✓' : '';
+        if (!status && cb.checked) {
+          const statusSpan = document.createElement('span');
+          statusSpan.className = 'platform-status';
+          statusSpan.textContent = '✓';
+          item.appendChild(statusSpan);
+        }
+      });
+      
+      // Update button text
+      const btn = document.querySelector('.btn-link');
+      if (btn) btn.textContent = allChecked ? 'Select All' : 'Clear All';
+    }
+    
     // Platform checkbox styling
     document.querySelectorAll('.platform-item').forEach(item => {
       const checkbox = item.querySelector('input');
       checkbox.addEventListener('change', () => {
         item.classList.toggle('selected', checkbox.checked);
-        const status = item.querySelector('.platform-status');
-        if (status) status.textContent = checkbox.checked ? '✓' : '';
+        let status = item.querySelector('.platform-status');
+        if (checkbox.checked) {
+          if (!status) {
+            status = document.createElement('span');
+            status.className = 'platform-status';
+            item.appendChild(status);
+          }
+          status.textContent = '✓';
+        } else if (status) {
+          status.textContent = '';
+        }
       });
     });
     
