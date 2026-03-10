@@ -829,25 +829,25 @@ web development</textarea>
           <p style="margin-top: 10px;">Configure your settings above and click "Start Extraction"</p>
         </div>
         
-        <div id="loadingState" class="empty-state hidden" style="max-width: 100%; padding: 20px;">
-          <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px;">
-            <div class="loading-spinner"></div>
-            <div>
-              <div class="loading-progress" id="loadingProgress" style="margin: 0;">0/5 leads</div>
-              <div class="loading-text" id="loadingText" style="font-size: 0.9rem;">Starting search...</div>
+        <div id="loadingState" class="empty-state hidden" style="max-width: 100%; padding: 15px;">
+          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 15px;">
+            <div class="loading-spinner" style="width: 35px; height: 35px; flex-shrink: 0;"></div>
+            <div style="min-width: 0;">
+              <div class="loading-progress" id="loadingProgress" style="margin: 0; font-size: 1.3rem;">0/5 leads</div>
+              <div class="loading-text" id="loadingText" style="font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Starting search...</div>
             </div>
           </div>
           
           <!-- Live Activity Console -->
-          <div style="background: #0d1117; border-radius: 12px; padding: 15px; text-align: left; font-family: 'Monaco', 'Consolas', monospace; font-size: 0.8rem;">
-            <div style="display: flex; gap: 8px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #30363d;">
-              <span style="width: 12px; height: 12px; border-radius: 50%; background: #ff5f56;"></span>
-              <span style="width: 12px; height: 12px; border-radius: 50%; background: #ffbd2e;"></span>
-              <span style="width: 12px; height: 12px; border-radius: 50%; background: #27ca40;"></span>
-              <span style="margin-left: 10px; color: #8b949e; font-size: 0.75rem;">LeadGen AI Console</span>
+          <div style="background: #0d1117; border-radius: 10px; padding: 12px; text-align: left; font-family: monospace; font-size: 0.7rem; overflow: hidden;">
+            <div style="display: flex; gap: 6px; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #30363d;">
+              <span style="width: 10px; height: 10px; border-radius: 50%; background: #ff5f56;"></span>
+              <span style="width: 10px; height: 10px; border-radius: 50%; background: #ffbd2e;"></span>
+              <span style="width: 10px; height: 10px; border-radius: 50%; background: #27ca40;"></span>
+              <span style="margin-left: 8px; color: #8b949e; font-size: 0.65rem;">AI Console</span>
             </div>
-            <div id="loadingDetails" style="max-height: 200px; overflow-y: auto; line-height: 1.8;">
-              <div style="color: #8b949e;">$ Initializing AI agent...</div>
+            <div id="loadingDetails" style="max-height: 180px; overflow-y: auto; overflow-x: hidden; line-height: 1.6; word-break: break-word;">
+              <div style="color: #8b949e;">$ Initializing...</div>
             </div>
           </div>
         </div>
@@ -950,8 +950,15 @@ web development</textarea>
       
       const entry = document.createElement('div');
       entry.style.color = colors[type] || colors.info;
-      entry.style.padding = '2px 0';
-      entry.innerHTML = `<span style="opacity: 0.5;">${new Date().toLocaleTimeString()}</span> ${icons[type] || '→'} ${message}`;
+      entry.style.padding = '3px 0';
+      entry.style.borderBottom = '1px solid #21262d';
+      entry.style.wordBreak = 'break-word';
+      entry.style.fontSize = '0.7rem';
+      entry.style.lineHeight = '1.4';
+      
+      // Shorter timestamp for mobile
+      const time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      entry.innerHTML = `<span style="opacity: 0.4; font-size: 0.6rem;">${time}</span> ${icons[type] || '→'} ${message}`;
       log.insertBefore(entry, log.firstChild);
       
       // Keep only last 30 entries
