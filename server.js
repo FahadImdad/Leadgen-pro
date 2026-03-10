@@ -16,22 +16,20 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // API Keys
 const BRIGHT_DATA_API_KEY = process.env.BRIGHT_DATA_API_KEY;
-const APIFY_TOKEN = process.env.APIFY_API_TOKEN;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 console.log('🔑 API Keys loaded:', {
   brightData: BRIGHT_DATA_API_KEY ? '✅' : '❌',
-  apify: APIFY_TOKEN ? '✅' : '❌',
   gemini: GEMINI_API_KEY ? '✅' : '❌'
 });
 
 // ============================================================
-// BRIGHT DATA SERP API
+// BRIGHT DATA SERP API (Primary & Only)
 // ============================================================
 async function brightDataSearch(query, options = {}) {
   if (!BRIGHT_DATA_API_KEY) {
-    console.log('No Bright Data key, falling back to Apify');
-    return apifySearch(query, options);
+    console.log('❌ No Bright Data API key configured');
+    return [];
   }
   
   try {
@@ -67,8 +65,8 @@ async function brightDataSearch(query, options = {}) {
     
     if (!response.ok) {
       const errText = await response.text();
-      console.log('Bright Data error:', response.status, errText);
-      return apifySearch(query, options);
+      console.log('❌ Bright Data error:', response.status, errText);
+      return [];
     }
     
     const data = await response.json();
@@ -84,56 +82,7 @@ async function brightDataSearch(query, options = {}) {
     return results;
     
   } catch (err) {
-    console.log('Bright Data error:', err.message);
-    return apifySearch(query, options);
-  }
-}
-
-// ============================================================
-// APIFY GOOGLE SEARCH (Fallback)
-// ============================================================
-async function apifySearch(query, options = {}) {
-  if (!APIFY_TOKEN) {
-    console.log('No Apify token available');
-    return [];
-  }
-  
-  try {
-    const timeframeMap = {
-      'd': 'qdr:d',
-      'w': 'qdr:w', 
-      'm': 'qdr:m',
-      'y': 'qdr:y'
-    };
-    
-    console.log(`🔍 Apify Search: ${query.substring(0, 50)}...`);
-    
-    const response = await fetch(
-      `https://api.apify.com/v2/acts/apify~google-search-scraper/run-sync-get-dataset-items?token=${APIFY_TOKEN}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          queries: query + (options.timeframe ? ` &tbs=${timeframeMap[options.timeframe] || ''}` : ''),
-          maxPagesPerQuery: 1,
-          resultsPerPage: options.limit || 10,
-          countryCode: options.region || 'us',
-          languageCode: 'en'
-        })
-      }
-    );
-    
-    const data = await response.json();
-    const results = (data[0]?.organicResults || []).map(r => ({
-      title: r.title,
-      url: r.url,
-      snippet: r.description
-    }));
-    
-    console.log(`✅ Found ${results.length} results`);
-    return results;
-  } catch (err) {
-    console.log('Apify search error:', err.message);
+    console.log('❌ Bright Data error:', err.message);
     return [];
   }
 }
@@ -554,14 +503,13 @@ app.post('/api/extract', async (req, res) => {
 app.get('/api/status', async (req, res) => {
   const status = {
     brightData: !!BRIGHT_DATA_API_KEY,
-    apify: !!APIFY_TOKEN,
     gemini: !!GEMINI_API_KEY
   };
   
   res.json({ 
-    connected: status.brightData || status.apify,
+    connected: status.brightData,
     apis: status,
-    agent: 'LeadGen Pro AI Agent v2.1 (Bright Data)'
+    agent: 'LeadGen Pro AI Agent v2.2 (Bright Data Only)'
   });
 });
 
@@ -604,10 +552,9 @@ app.get('/api/export', (req, res) => {
 // ============================================================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`\n🚀 LeadGen Pro AI Agent v2.1 running on port ${PORT}`);
+  console.log(`\n🚀 LeadGen Pro AI Agent v2.2 running on port ${PORT}`);
   console.log(`   Bright Data: ${BRIGHT_DATA_API_KEY ? '✅' : '❌'}`);
-  console.log(`   Apify: ${APIFY_TOKEN ? '✅' : '❌'}`);
-  console.log(`   Gemini: ${GEMINI_API_KEY ? '✅' : '❌'}\n`);
+  console.log(`   Gemini AI: ${GEMINI_API_KEY ? '✅' : '❌'}\n`);
 });
 
 module.exports = app;
