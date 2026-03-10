@@ -110,39 +110,47 @@ async function brightDataSearch(query, options = {}) {
 // ============================================================
 async function qualifyLead(pageContent, url, keyword) {
   if (!GEMINI_API_KEY) {
-    return fallbackQualification(pageContent, url);
+    return fallbackQualification(pageContent, url, keyword);
   }
 
   try {
     const truncatedContent = pageContent.substring(0, 6000);
     
-    const prompt = `You are a strict lead qualification and data extraction AI. Analyze this content to find REAL potential customers seeking "${keyword}" services.
+    const prompt = `TASK: Is this a person who needs "${keyword}" services?
 
-URL: ${url}
+CONTENT: ${truncatedContent}
 
-CONTENT:
-${truncatedContent}
+ANSWER THESE 3 QUESTIONS:
 
-QUALIFICATION RULES - BE VERY STRICT:
+Q1: Is the MAIN TOPIC about "${keyword}"? 
+(If it's about photos, food, lifestyle, random stuff → NO)
 
-✅ QUALIFY (is_lead: true) ONLY IF ALL are true:
-- An INDIVIDUAL person (not a company)
-- SEEKING/LOOKING to hire someone
-- Post says "I need...", "looking for someone to...", "can anyone help me..."
-- They have a PROJECT they need help with
-- Tagged [HIRING] or asking for recommendations
+Q2: Is this an INDIVIDUAL seeking help (not a company advertising)?
+(If it says "We offer", "Our services", "Contact us", company name → NO)
 
-❌ REJECT (is_lead: false) - MUST REJECT IF ANY of these:
-- Contains "We offer", "Our services", "Reach out", "Contact us" = COMPANY ADVERTISING
-- Contains company name (Ltd, LLC, Inc, Agency, Studio, Publishers) = REJECT
-- Contains hashtags (#) = MARKETING POST = REJECT
-- Contains "[For Hire]" = Someone offering services = REJECT
-- Contains prices like "$X/hr" or "starting at" = SERVICE PROVIDER = REJECT
-- Contains "years of experience", "my portfolio" = SELF PROMOTION = REJECT
-- Tutorial, guide, how-to = CONTENT = REJECT
+Q3: Does the person clearly say they need help?
+(Look for: "I need", "help me", "looking for someone", "[Hiring]")
 
-CRITICAL: Most search results are COMPANIES ADVERTISING. Reject them all!
-We want INDIVIDUALS who need help with THEIR OWN project.
+RULES:
+- ALL 3 must be YES to qualify
+- If Q1 is NO → is_lead: false (wrong topic)
+- If Q2 is NO → is_lead: false (company/service provider)  
+- If Q3 is NO → is_lead: false (not seeking help)
+
+Return JSON:
+{
+  "q1_relevant": true/false,
+  "q2_individual": true/false,
+  "q3_seeking_help": true/false,
+  "is_lead": true only if ALL above are true,
+  "name": "person name if found",
+  "email": "email if found or empty string",
+  "phone": "phone if found or -",
+  "username": "username if found",
+  "intent": "what they need",
+  "intent_score": 1-10,
+  "reason": "brief explanation"
+}
 
 DATA EXTRACTION RULES (CRITICAL):
 1. NAME (required): Extract the real name of the person who posted. If not visible, use username without prefixes.
@@ -198,108 +206,20 @@ IMPORTANT: Never invent or guess email/phone. Only extract what's actually visib
     console.log('Qualification error:', err.message);
   }
   
-  return fallbackQualification(pageContent, url);
+  return fallbackQualification(pageContent, url, keyword);
 }
 
-function fallbackQualification(content, url) {
+function fallbackQualification(content, url, keyword = '') {
   const lower = content.toLowerCase();
+  const keywordLower = keyword.toLowerCase();
   
-  // Bad patterns (reject) - companies/people OFFERING services
-  const badPatterns = [
-    // Service providers
-    '[for hire]', 'for hire', 'offering services', 'available for',
-    'we offer', 'we provide', 'our services', 'our team', 'our company',
-    'reach out', 'contact us', 'get in touch', 'book a call',
-    'starting at', 'prices from', 'affordable rates',
-    'hire me', 'my portfolio', 'check out my', 'years of experience',
-    // Marketing/promo
-    '#', 'hashtag', 'follow us', 'like and share',
-    // Content
-    'how to ', 'guide to', 'tutorial', 'step by step', 'tips for',
-    'faq', 'about us', 'pricing', 'packages', 'copyright',
-    // Company indicators
-    'ltd', 'llc', 'inc', 'agency', 'studio', 'publishing house',
-    'publishers', 'services:', 'consultancy'
-  ];
-  
-  // Good patterns (seeking help) - INDIVIDUALS looking to BUY
-  const goodPatterns = [
-    '[hiring]', 'i am looking', 'i need help', 'need someone to',
-    'can anyone help', 'looking for a freelancer', 'my manuscript',
-    'my book', 'my novel', 'my story', 'written a book', 'wrote a book',
-    'want to publish', 'help me publish', 'self-publish',
-    'budget is', 'willing to pay', 'what would it cost'
-  ];
-  
-  const hasBad = badPatterns.some(p => lower.includes(p));
-  const hasGood = goodPatterns.some(p => lower.includes(p));
-  
-  // If has bad patterns, reject immediately
-  if (hasBad) {
-    return {
-      is_lead: false,
-      name: '', email: '', phone: '-', username: '',
-      intent: '', intent_score: 1, contact_method: 'none',
-      reason: 'Service provider or marketing content'
-    };
-  }
-  
-  // Extract REAL email only (personal domains)
-  const emailMatch = content.match(/[a-zA-Z0-9._%+-]+@(gmail|yahoo|hotmail|outlook|icloud|aol)\.(com|net|org)/i);
-  let email = '';
-  if (emailMatch) {
-    const potentialEmail = emailMatch[0].toLowerCase();
-    // Validate it's not a fake pattern
-    if (!potentialEmail.includes('example') && 
-        !potentialEmail.includes('test') && 
-        !potentialEmail.includes('fake') &&
-        !potentialEmail.includes('sample') &&
-        potentialEmail.length > 8) {
-      email = potentialEmail;
-    }
-  }
-  
-  // Extract REAL phone only (validate format)
-  let phone = '-';
-  const phoneMatch = content.match(/(?:\+?1[-.\s]?)?\(?[2-9][0-9]{2}\)?[-.\s]?[2-9][0-9]{2}[-.\s]?[0-9]{4}/);
-  if (phoneMatch) {
-    const digits = phoneMatch[0].replace(/\D/g, '');
-    // Validate not fake (555, 123, etc.)
-    if (!digits.includes('555') && 
-        !digits.startsWith('123') && 
-        digits.length >= 10 && 
-        digits.length <= 11) {
-      phone = phoneMatch[0];
-    }
-  }
-  
-  // Extract username
-  let username = '';
-  if (url.includes('reddit.com')) {
-    const match = content.match(/"author"\s*:\s*"([^"]+)"/);
-    if (match && match[1] !== '[deleted]') username = `u/${match[1]}`;
-  } else if (url.includes('twitter.com') || url.includes('x.com')) {
-    const match = url.match(/(?:twitter\.com|x\.com)\/([^\/\?]+)/);
-    if (match && !['search', 'explore', 'home'].includes(match[1])) username = `@${match[1]}`;
-  } else if (url.includes('linkedin.com/in/')) {
-    const match = url.match(/linkedin\.com\/in\/([^\/\?]+)/);
-    if (match) username = match[1];
-  }
-  
-  // Check for DM request
-  const hasDmRequest = /\b(dm\s*me|message\s*me|pm\s*me)\b/i.test(content);
-  
+  // REJECT EVERYTHING IN FALLBACK - Only Gemini AI should qualify
+  // Fallback = Gemini failed = not trustworthy = REJECT
   return {
-    is_lead: hasGood && !hasBad,
-    name: '',
-    email: email,
-    email_verified: email ? true : false,
-    phone: phone,
-    username: username,
-    intent: '',
-    intent_score: hasGood ? 6 : 3,
-    contact_method: email ? 'email' : (hasDmRequest || username ? 'dm' : 'none'),
-    reason: hasBad ? 'Contains tutorial/service provider patterns' : 'Pattern match'
+    is_lead: false,
+    name: '', email: '', phone: '-', username: '',
+    intent: '', intent_score: 1, contact_method: 'none',
+    reason: 'AI qualification required - fallback rejected'
   };
 }
 
