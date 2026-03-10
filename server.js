@@ -149,48 +149,54 @@ async function qualifyLead(pageContent, url, keyword) {
   try {
     const truncatedContent = pageContent.substring(0, 6000);
     
-    const prompt = `You are a strict lead qualification AI. Analyze this content and determine if this is a REAL potential customer seeking "${keyword}" services.
+    const prompt = `You are a strict lead qualification and data extraction AI. Analyze this content to find REAL potential customers seeking "${keyword}" services.
 
 URL: ${url}
 
 CONTENT:
 ${truncatedContent}
 
-QUALIFY AS LEAD (is_lead: true) ONLY IF:
-- Individual person asking for help with THEIR OWN project
-- Someone seeking recommendations or advice for hiring
-- Person with a specific need who would PAY for services
+QUALIFICATION RULES:
+✅ QUALIFY (is_lead: true) ONLY IF person is:
+- Asking for help with THEIR OWN project
+- Seeking recommendations or advice for hiring
+- Willing to PAY for services
 - Posts like "I need help with...", "looking for someone to...", "can anyone recommend..."
 
-REJECT (is_lead: false) IF:
-- Company/agency OFFERING services (competitor)
+❌ REJECT (is_lead: false) IF:
+- Company/agency OFFERING services
 - Tutorial, guide, how-to article, blog post
-- Job posting for employees (not freelance)
-- News article or review
-- FAQ page or service provider website
+- Job posting for employees
+- News article, review, FAQ page
 - Someone sharing their own work/portfolio
 
-EXTRACT IF QUALIFIED:
-- Author name (who posted this)
-- Email (if visible in content)
-- Phone (if visible in content)  
-- Platform username (Reddit u/, Twitter @, etc.)
-- What they need (brief intent summary)
-- Intent score 1-10 (10 = ready to buy, 1 = just curious)
-- Contact method: "email" if email found, "dm" if need to DM them
+DATA EXTRACTION RULES (CRITICAL):
+1. NAME (required): Extract the real name of the person who posted. If not visible, use username without prefixes.
+2. EMAIL (required): Extract ONLY if a REAL email is visible in the content. 
+   - Must be valid format (name@domain.com)
+   - Personal emails preferred (gmail, yahoo, outlook)
+   - DO NOT make up fake emails
+   - If no email found, set email to empty string ""
+3. PHONE (optional): Extract if visible, otherwise set to "-"
+   - Must look like real phone number
+   - DO NOT make up fake numbers
+4. VERIFY EMAIL: Check if email looks legitimate (not example@, test@, fake patterns)
 
 Respond with JSON only:
 {
   "is_lead": true/false,
-  "name": "...",
-  "email": "...",
-  "phone": "...", 
-  "username": "...",
-  "intent": "...",
-  "intent_score": 8,
+  "name": "Real name or username",
+  "email": "real@email.com or empty string if not found",
+  "email_verified": true/false,
+  "phone": "real phone or -", 
+  "username": "platform username",
+  "intent": "what they need",
+  "intent_score": 1-10,
   "contact_method": "email" or "dm",
-  "reason": "why qualified/rejected"
-}`;
+  "reason": "qualification reason"
+}
+
+IMPORTANT: Never invent or guess email/phone. Only extract what's actually visible.`;
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
@@ -240,22 +246,46 @@ function fallbackQualification(content, url) {
   const hasBad = badPatterns.some(p => lower.includes(p));
   const hasGood = goodPatterns.some(p => lower.includes(p));
   
-  // Extract email
-  const emailMatch = content.match(/[a-zA-Z0-9._%+-]+@(gmail|yahoo|hotmail|outlook)\.[a-zA-Z]{2,}/i);
-  const email = emailMatch ? emailMatch[0] : '';
+  // Extract REAL email only (personal domains)
+  const emailMatch = content.match(/[a-zA-Z0-9._%+-]+@(gmail|yahoo|hotmail|outlook|icloud|aol)\.(com|net|org)/i);
+  let email = '';
+  if (emailMatch) {
+    const potentialEmail = emailMatch[0].toLowerCase();
+    // Validate it's not a fake pattern
+    if (!potentialEmail.includes('example') && 
+        !potentialEmail.includes('test') && 
+        !potentialEmail.includes('fake') &&
+        !potentialEmail.includes('sample') &&
+        potentialEmail.length > 8) {
+      email = potentialEmail;
+    }
+  }
   
-  // Extract phone
+  // Extract REAL phone only (validate format)
+  let phone = '-';
   const phoneMatch = content.match(/(?:\+?1[-.\s]?)?\(?[2-9][0-9]{2}\)?[-.\s]?[2-9][0-9]{2}[-.\s]?[0-9]{4}/);
-  const phone = phoneMatch ? phoneMatch[0] : '';
+  if (phoneMatch) {
+    const digits = phoneMatch[0].replace(/\D/g, '');
+    // Validate not fake (555, 123, etc.)
+    if (!digits.includes('555') && 
+        !digits.startsWith('123') && 
+        digits.length >= 10 && 
+        digits.length <= 11) {
+      phone = phoneMatch[0];
+    }
+  }
   
   // Extract username
   let username = '';
   if (url.includes('reddit.com')) {
     const match = content.match(/"author"\s*:\s*"([^"]+)"/);
-    if (match) username = `u/${match[1]}`;
+    if (match && match[1] !== '[deleted]') username = `u/${match[1]}`;
   } else if (url.includes('twitter.com') || url.includes('x.com')) {
     const match = url.match(/(?:twitter\.com|x\.com)\/([^\/\?]+)/);
-    if (match) username = `@${match[1]}`;
+    if (match && !['search', 'explore', 'home'].includes(match[1])) username = `@${match[1]}`;
+  } else if (url.includes('linkedin.com/in/')) {
+    const match = url.match(/linkedin\.com\/in\/([^\/\?]+)/);
+    if (match) username = match[1];
   }
   
   // Check for DM request
@@ -265,6 +295,7 @@ function fallbackQualification(content, url) {
     is_lead: hasGood && !hasBad,
     name: '',
     email: email,
+    email_verified: email ? true : false,
     phone: phone,
     username: username,
     intent: '',
@@ -428,34 +459,58 @@ app.post('/api/extract', async (req, res) => {
             const qualification = await qualifyLead(text, result.url, keyword);
             
             if (qualification.is_lead && qualification.intent_score >= 5) {
-              stats.qualified++;
-              
               const detectedPlatform = detectPlatform(result.url);
               
-              const lead = {
-                name: qualification.name || qualification.username || 'Unknown',
-                email: qualification.email || (qualification.contact_method === 'dm' ? `(DM on ${detectedPlatform})` : ''),
-                phone: qualification.phone || '',
-                source: detectedPlatform,
-                query: keyword,
-                intent: qualification.intent || result.snippet?.substring(0, 100) || '',
-                intentScore: qualification.intent_score,
-                title: result.title,
-                url: result.url,
-                username: qualification.username || '',
-                contactMethod: qualification.contact_method,
-                extractedAt: new Date().toISOString()
-              };
+              // Validate email is real and present
+              const hasRealEmail = qualification.email && 
+                                   qualification.email.includes('@') && 
+                                   qualification.email.length > 5 &&
+                                   !qualification.email.includes('example') &&
+                                   !qualification.email.includes('test@') &&
+                                   !qualification.email.includes('fake') &&
+                                   /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(qualification.email);
               
-              // Track stats
-              if (qualification.email && qualification.email.includes('@')) {
-                stats.emailLeads++;
-              } else if (qualification.contact_method === 'dm') {
-                stats.dmLeads++;
+              // For DM leads without email
+              const isDmLead = !hasRealEmail && qualification.contact_method === 'dm';
+              
+              // Validate name is present
+              const hasName = qualification.name && 
+                              qualification.name.length > 1 && 
+                              qualification.name !== 'Unknown' &&
+                              qualification.name !== '-';
+              
+              // Only include if has real email OR is a DM lead with username
+              if (hasRealEmail || (isDmLead && qualification.username)) {
+                stats.qualified++;
+                
+                const lead = {
+                  name: hasName ? qualification.name : (qualification.username || '-'),
+                  email: hasRealEmail ? qualification.email : `(DM on ${detectedPlatform})`,
+                  phone: qualification.phone && qualification.phone !== '' ? qualification.phone : '-',
+                  source: detectedPlatform,
+                  query: keyword,
+                  intent: qualification.intent || result.snippet?.substring(0, 100) || '',
+                  intentScore: qualification.intent_score,
+                  title: result.title,
+                  url: result.url,
+                  username: qualification.username || '',
+                  contactMethod: hasRealEmail ? 'email' : 'dm',
+                  emailVerified: qualification.email_verified || false,
+                  extractedAt: new Date().toISOString()
+                };
+                
+                // Track stats
+                if (hasRealEmail) {
+                  stats.emailLeads++;
+                } else {
+                  stats.dmLeads++;
+                }
+                
+                results.push(lead);
+                console.log(`✅ Lead #${results.length}: ${lead.name} | ${lead.email} | ${lead.phone} | Intent: ${lead.intentScore}/10`);
+              } else {
+                console.log(`⚠️ Skipped: No real email or username found`);
               }
-              
-              results.push(lead);
-              console.log(`✅ Lead #${results.length}: ${lead.name} (${lead.contactMethod}) - Intent: ${lead.intentScore}/10`);
             } else {
               console.log(`❌ Rejected: ${qualification.reason || 'Low intent'}`);
             }
