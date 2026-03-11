@@ -69,25 +69,38 @@ async function brightDataSearch(query, options = {}) {
     
     clearTimeout(timeout);
     
+    const responseText = await response.text();
+    console.log('📡 Bright Data response status:', response.status);
+    console.log('📡 Response preview:', responseText.substring(0, 500));
+    
     if (!response.ok) {
-      const errText = await response.text();
-      console.log('❌ Bright Data error:', response.status, errText);
+      console.log('❌ Bright Data error:', response.status, responseText);
       return [];
     }
     
-    const data = await response.json();
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (e) {
+      console.log('❌ JSON parse error:', e.message);
+      return [];
+    }
     
     // Parse response - body is a JSON string
     let organic = [];
     if (data.body) {
       try {
         const bodyData = typeof data.body === 'string' ? JSON.parse(data.body) : data.body;
+        console.log('📊 Body parsed, organic count:', (bodyData.organic || []).length);
         organic = bodyData.organic || [];
       } catch (e) {
         console.log('Body parse error:', e.message);
+        console.log('Raw body:', data.body?.substring(0, 300));
       }
     } else if (data.organic) {
       organic = data.organic;
+    } else {
+      console.log('⚠️ No organic results in response. Keys:', Object.keys(data));
     }
     
     const results = organic.map(r => ({
