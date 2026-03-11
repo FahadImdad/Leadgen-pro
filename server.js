@@ -385,9 +385,11 @@ function generateSearchQueries(keyword, platform) {
       `site:reddit.com "budget" "${keyword}" "looking for"`
     ],
     linkedin: [
-      `site:linkedin.com/posts "looking for" "${keyword}" "email"`,
-      `site:linkedin.com "hiring" "${keyword}" freelance`,
-      `site:linkedin.com "need" "${keyword}" "contact"`
+      `site:linkedin.com/posts "I need" "${keyword}" "help"`,
+      `site:linkedin.com/posts "looking for" "${keyword}" "recommendations"`,
+      `site:linkedin.com/posts "can anyone recommend" "${keyword}"`,
+      `site:linkedin.com/posts "hiring" "${keyword}"`,
+      `site:linkedin.com/feed "need help" "${keyword}"`
     ],
     twitter: [
       `site:twitter.com "need" "${keyword}" "DM" OR "email"`,
