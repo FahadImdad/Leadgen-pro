@@ -900,7 +900,8 @@
       if (!keywords.length) return alert('Enter at least one keyword');
       if (!platforms.length) return alert('Select at least one platform');
       
-      // Show loading
+      // Show loading and reset state
+      window.collectedLeads = [];
       document.getElementById('emptyState').classList.add('hidden');
       document.getElementById('tableContainer').classList.add('hidden');
       document.getElementById('loadingState').classList.remove('hidden');
@@ -933,31 +934,49 @@
             document.getElementById('leadsCount').textContent = data.found;
             addLog(`LEAD: ${data.lead.name} - ${data.lead.email}`, 'success');
             addLiveLead(data.lead);
+            // Track leads as they come in
+            if (!window.collectedLeads) window.collectedLeads = [];
+            window.collectedLeads.push(data.lead);
           }
           
           if (data.type === 'complete') {
             es.close();
-            allLeads = data.leads;
+            allLeads = data.leads || window.collectedLeads || [];
             document.getElementById('loadingState').classList.add('hidden');
-            displayResults(data.leads);
+            displayResults(allLeads);
             updateStats(data);
             document.getElementById('extractBtn').disabled = false;
+            window.collectedLeads = [];
           }
           
           if (data.type === 'error') {
             es.close();
-            alert('Error: ' + data.error);
+            // Show collected leads even on error
+            allLeads = window.collectedLeads || [];
             document.getElementById('loadingState').classList.add('hidden');
-            document.getElementById('emptyState').classList.remove('hidden');
+            if (allLeads.length > 0) {
+              displayResults(allLeads);
+            } else {
+              document.getElementById('emptyState').classList.remove('hidden');
+            }
             document.getElementById('extractBtn').disabled = false;
+            window.collectedLeads = [];
           }
         };
         
         es.onerror = () => {
           es.close();
+          // Show collected leads even on connection error/timeout
+          allLeads = window.collectedLeads || [];
           document.getElementById('loadingState').classList.add('hidden');
-          document.getElementById('emptyState').classList.remove('hidden');
+          if (allLeads.length > 0) {
+            displayResults(allLeads);
+            addLog('Connection ended - showing collected leads', 'warning');
+          } else {
+            document.getElementById('emptyState').classList.remove('hidden');
+          }
           document.getElementById('extractBtn').disabled = false;
+          window.collectedLeads = [];
         };
       } catch (err) {
         alert('Error: ' + err.message);
