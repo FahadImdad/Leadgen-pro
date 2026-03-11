@@ -904,6 +904,7 @@
       window.collectedLeads = [];
       document.getElementById('emptyState').classList.add('hidden');
       document.getElementById('tableContainer').classList.add('hidden');
+      document.getElementById('resultsBody').innerHTML = ''; // Clear table
       document.getElementById('loadingState').classList.remove('hidden');
       document.getElementById('liveLeadsSection').classList.add('hidden');
       document.getElementById('liveLeadsList').innerHTML = '';
@@ -933,33 +934,39 @@
             document.getElementById('loadingProgress').textContent = `${data.found}/${data.total} leads`;
             document.getElementById('leadsCount').textContent = data.found;
             addLog(`LEAD: ${data.lead.name} - ${data.lead.email}`, 'success');
-            addLiveLead(data.lead);
+            
             // Track leads as they come in
             if (!window.collectedLeads) window.collectedLeads = [];
             window.collectedLeads.push(data.lead);
+            
+            // Show table and add lead in real-time
+            document.getElementById('emptyState').classList.add('hidden');
+            document.getElementById('tableContainer').classList.remove('hidden');
+            addLeadToTable(data.lead);
           }
           
           if (data.type === 'complete') {
             es.close();
-            allLeads = data.leads || window.collectedLeads || [];
+            allLeads = window.collectedLeads || data.leads || [];
             document.getElementById('loadingState').classList.add('hidden');
-            displayResults(allLeads);
+            // Table already populated in real-time, just update stats
+            document.getElementById('leadsCount').textContent = allLeads.length;
             updateStats(data);
             document.getElementById('extractBtn').disabled = false;
+            addLog(`✅ Complete! Found ${allLeads.length} leads`, 'success');
             window.collectedLeads = [];
           }
           
           if (data.type === 'error') {
             es.close();
-            // Show collected leads even on error
             allLeads = window.collectedLeads || [];
             document.getElementById('loadingState').classList.add('hidden');
-            if (allLeads.length > 0) {
-              displayResults(allLeads);
-            } else {
+            // Table already has leads from real-time, just show it
+            if (allLeads.length === 0) {
               document.getElementById('emptyState').classList.remove('hidden');
             }
             document.getElementById('extractBtn').disabled = false;
+            addLog(`Error: ${data.error}`, 'error');
             window.collectedLeads = [];
           }
         };
@@ -994,25 +1001,30 @@
       const tbody = document.getElementById('resultsBody');
       tbody.innerHTML = '';
       
-      leads.forEach(lead => {
-        const badge = `badge-${(lead.source || 'google').toLowerCase()}`;
-        const contactHtml = lead.email.includes('@') 
-          ? `<span style="color:var(--success)">📧 ${lead.email}</span>`
-          : `<span style="color:var(--warning)">💬 ${lead.email}</span>`;
-        const intentBars = '🔥'.repeat(Math.ceil(lead.intentScore / 2));
-        
-        const row = document.createElement('tr');
-        row.innerHTML = `
-          <td><strong>${lead.name}</strong></td>
-          <td>${contactHtml}</td>
-          <td>${lead.phone || '-'}</td>
-          <td><span title="${lead.intentScore}/10">${intentBars}</span></td>
-          <td><span class="badge ${badge}">${lead.source}</span></td>
-          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${lead.intent || '-'}</td>
-          <td><a href="${lead.url}" target="_blank" style="color:var(--primary)">🔗</a></td>
-        `;
-        tbody.appendChild(row);
-      });
+      leads.forEach(lead => addLeadToTable(lead));
+    }
+    
+    // Add single lead to table (real-time)
+    function addLeadToTable(lead) {
+      const tbody = document.getElementById('resultsBody');
+      const badge = `badge-${(lead.source || 'google').toLowerCase()}`;
+      const contactHtml = lead.email && lead.email.includes('@') 
+        ? `<span style="color:var(--success)">📧 ${lead.email}</span>`
+        : `<span style="color:var(--warning)">💬 ${lead.email || 'Visit Link'}</span>`;
+      const intentBars = '🔥'.repeat(Math.ceil((lead.intentScore || 5) / 2));
+      
+      const row = document.createElement('tr');
+      row.style.animation = 'fadeIn 0.3s ease';
+      row.innerHTML = `
+        <td><strong>${lead.name || 'Lead'}</strong></td>
+        <td>${contactHtml}</td>
+        <td>${lead.phone || '-'}</td>
+        <td><span title="${lead.intentScore || 5}/10">${intentBars}</span></td>
+        <td><span class="badge ${badge}">${lead.source || 'Google'}</span></td>
+        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${lead.intent || '-'}</td>
+        <td><a href="${lead.url}" target="_blank" style="color:var(--primary)">🔗</a></td>
+      `;
+      tbody.appendChild(row);
     }
     
     function updateStats(data) {
