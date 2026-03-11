@@ -115,70 +115,49 @@ async function qualifyLead(pageContent, url, keyword) {
 
   try {
     const truncatedContent = pageContent.substring(0, 6000);
+    const isShortContent = pageContent.length < 500; // Snippet only
     
-    const prompt = `TASK: Is this a person who needs "${keyword}" services?
+    const prompt = `TASK: Is this a POTENTIAL CUSTOMER seeking "${keyword}" services?
 
-CONTENT: ${truncatedContent}
+CONTENT (${isShortContent ? 'snippet only - be lenient' : 'full page'}):
+${truncatedContent}
 
-ANSWER THESE 3 QUESTIONS:
+QUALIFY WITH 3 QUESTIONS:
 
-Q1: Is the MAIN TOPIC about "${keyword}"? 
-(If it's about photos, food, lifestyle, random stuff → NO)
+Q1 - TOPIC: Is this related to "${keyword}"?
+YES if: mentions ${keyword}, related terms, or the industry
+NO if: completely unrelated topic (food, random photos, etc)
 
-Q2: Is this an INDIVIDUAL seeking help (not a company advertising)?
-(If it says "We offer", "Our services", "Contact us", company name → NO)
+Q2 - NOT A COMPANY: Is this NOT a company/service provider advertising?
+YES if: individual person, someone asking for help, job posting
+NO if: "We offer", "Our services", company name with Ltd/LLC/Inc, marketing content
 
-Q3: Does the person clearly say they need help?
-(Look for: "I need", "help me", "looking for someone", "[Hiring]")
+Q3 - SEEKING HELP: Does this person/post indicate they need services?
+YES if: "I need", "looking for", "[Hiring]", "help me", "anyone recommend", job posting, question asking for recommendations
+NO if: just discussing the topic, sharing info, tutorial/guide
 
-RULES:
-- ALL 3 must be YES to qualify
-- If Q1 is NO → is_lead: false (wrong topic)
-- If Q2 is NO → is_lead: false (company/service provider)  
-- If Q3 is NO → is_lead: false (not seeking help)
+${isShortContent ? 'NOTE: This is a short snippet. If it LOOKS like someone seeking help, lean toward YES for Q3.' : ''}
 
-Return JSON:
+EXTRACT CONTACT INFO:
+- name: Real name if visible, otherwise username (without u/ or @ prefix)
+- email: ONLY if a real email is visible (e.g. john@gmail.com). Leave empty "" if not found
+- phone: Real phone if visible, otherwise "-"
+- username: Platform username if visible
+
+RESPOND WITH JSON ONLY:
 {
   "q1_relevant": true/false,
-  "q2_individual": true/false,
+  "q2_not_company": true/false,
   "q3_seeking_help": true/false,
-  "is_lead": true only if ALL above are true,
-  "name": "person name if found",
-  "email": "email if found or empty string",
-  "phone": "phone if found or -",
-  "username": "username if found",
-  "intent": "what they need",
+  "is_lead": true if ALL 3 questions are YES,
+  "name": "extracted name",
+  "email": "email or empty string",
+  "phone": "phone or -",
+  "username": "username",
+  "intent": "what they need (brief)",
   "intent_score": 1-10,
-  "reason": "brief explanation"
-}
-
-DATA EXTRACTION RULES (CRITICAL):
-1. NAME (required): Extract the real name of the person who posted. If not visible, use username without prefixes.
-2. EMAIL (required): Extract ONLY if a REAL email is visible in the content. 
-   - Must be valid format (name@domain.com)
-   - Personal emails preferred (gmail, yahoo, outlook)
-   - DO NOT make up fake emails
-   - If no email found, set email to empty string ""
-3. PHONE (optional): Extract if visible, otherwise set to "-"
-   - Must look like real phone number
-   - DO NOT make up fake numbers
-4. VERIFY EMAIL: Check if email looks legitimate (not example@, test@, fake patterns)
-
-Respond with JSON only:
-{
-  "is_lead": true/false,
-  "name": "Real name or username",
-  "email": "real@email.com or empty string if not found",
-  "email_verified": true/false,
-  "phone": "real phone or -", 
-  "username": "platform username",
-  "intent": "what they need",
-  "intent_score": 1-10,
-  "contact_method": "email" or "dm",
-  "reason": "qualification reason"
-}
-
-IMPORTANT: Never invent or guess email/phone. Only extract what's actually visible.`;
+  "reason": "why qualified/rejected"
+}`;
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
@@ -308,41 +287,63 @@ function fallbackQualification(content, url, keyword = '') {
 }
 
 // ============================================================
-// PAGE SCRAPER
+// PAGE SCRAPER (Direct fetch with fallback)
 // ============================================================
-async function fetchPageContent(url) {
-  // Convert Reddit URLs to old.reddit.com (less blocking)
+async function fetchPageContent(url, sendProgress = null) {
+  // Try direct fetch first (works for Reddit, Quora, some others)
   let fetchUrl = url;
+  
+  // Reddit: use old.reddit.com (less blocking)
   if (url.includes('reddit.com') && !url.includes('old.reddit.com')) {
     fetchUrl = url.replace('www.reddit.com', 'old.reddit.com').replace('reddit.com', 'old.reddit.com');
   }
   
   try {
+    if (sendProgress) sendProgress(-1, -1, `🌐 Fetching page content...`);
+    
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8000);
     
     const response = await fetch(fetchUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
-        'Accept': 'text/html',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml',
         'Accept-Language': 'en-US,en;q=0.9'
       },
       signal: controller.signal
     });
     
     clearTimeout(timeout);
+    
+    if (!response.ok) {
+      if (sendProgress) sendProgress(-1, -1, `⚠️ Page blocked (${response.status}), using snippet`);
+      return { text: '', html: '' };
+    }
+    
     const html = await response.text();
+    
+    // Check for block pages
+    if (html.includes("You've been blocked") || html.includes('access denied') || html.includes('captcha')) {
+      if (sendProgress) sendProgress(-1, -1, `⚠️ Page blocked, using snippet`);
+      return { text: '', html: '' };
+    }
     
     const text = html
       .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
       .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
       .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
       .replace(/\s+/g, ' ')
       .trim();
     
+    if (sendProgress) sendProgress(-1, -1, `✅ Got ${text.length} chars`);
     return { text, html };
+    
   } catch (err) {
-    console.log('Fetch error:', err.message);
+    if (sendProgress) sendProgress(-1, -1, `⚠️ Fetch failed: ${err.message}`);
     return { text: '', html: '' };
   }
 }
@@ -517,23 +518,30 @@ app.get('/api/extract-stream', async (req, res) => {
               if (!result.url || seenUrls.has(result.url)) continue;
               seenUrls.add(result.url);
               
-              if (stats.analyzed >= 15 * stats.loops) continue;
+              if (stats.analyzed >= 10 * stats.loops) continue; // Reduced since page fetch is slower
               stats.analyzed++;
-              
-              // Use search result snippet directly (no page scraping needed)
-              const content = `${result.title || ''} ${result.snippet || ''}`;
-              if (!content || content.length < 20) {
-                continue;
-              }
               
               // Show what we're analyzing
               const shortUrl = result.url.replace(/https?:\/\/(www\.)?/, '').substring(0, 40);
-              sendProgress(results.length, max, `🤖 AI analyzing: ${shortUrl}...`);
+              sendProgress(results.length, max, `🔍 Analyzing: ${shortUrl}...`);
               
-              // Show snippet preview
-              const contentPreview = content.substring(0, 100).replace(/\s+/g, ' ').trim();
-              sendProgress(results.length, max, `📄 Content: "${contentPreview}..."`);
+              // FETCH FULL PAGE CONTENT (not just snippet)
+              const snippetPreview = (result.snippet || '').substring(0, 80);
+              sendProgress(results.length, max, `📄 Snippet: "${snippetPreview}..."`);
               
+              const { text: pageContent } = await fetchPageContent(result.url, sendProgress);
+              
+              // Use full page content if available, fall back to snippet
+              const content = pageContent && pageContent.length > 200 
+                ? pageContent 
+                : `${result.title || ''} ${result.snippet || ''}`;
+              
+              if (!content || content.length < 50) {
+                sendProgress(results.length, max, `⚠️ Skipped: No content retrieved`);
+                continue;
+              }
+              
+              sendProgress(results.length, max, `📊 Content length: ${content.length} chars`);
               sendProgress(results.length, max, `🤖 AI AGENT: Analyzing with Gemini AI...`);
               sendProgress(results.length, max, `   → Checking if this is someone seeking "${keyword}" services`);
               
