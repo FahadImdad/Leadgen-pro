@@ -360,11 +360,15 @@ function generateSearchQueries(keyword, platform) {
       `"I'm looking for" "${keyword}" "@gmail.com" OR "@outlook.com"`
     ],
     reddit: [
-      `site:reddit.com/r/forhire "[Hiring]" "${keyword}"`,
-      `site:reddit.com ("I need" OR "looking for") "${keyword}" "email" OR "contact"`,
-      `site:reddit.com/r/freelance "${keyword}" hiring`,
-      `site:reddit.com ("help me find" OR "recommend") "${keyword}"`,
-      `site:reddit.com "budget" "${keyword}" "looking for"`
+      `site:reddit.com/r/forhire "[Hiring]" ${keyword}`,
+      `site:reddit.com/r/forhire "Hiring" ${keyword}`,
+      `site:reddit.com "I need" ${keyword}`,
+      `site:reddit.com "looking for" ${keyword} help`,
+      `site:reddit.com "need help" ${keyword}`,
+      `site:reddit.com/r/freelance ${keyword} hiring`,
+      `site:reddit.com ${keyword} "budget" "looking for"`,
+      `site:reddit.com ${keyword} "can anyone recommend"`,
+      `site:reddit.com/r/slavelabour ${keyword}`
     ],
     linkedin: [
       `site:linkedin.com/posts "I need" "${keyword}" "help"`,
@@ -453,9 +457,13 @@ app.get('/api/extract-stream', async (req, res) => {
     
     sendProgress(0, max, 'Starting search...');
     
-    while (results.length < max) { // UNLIMITED - keep going until target reached
+    const maxLoops = 50; // Safety limit
+    let noNewResultsCount = 0;
+    
+    while (results.length < max && stats.loops < maxLoops) {
       stats.loops++;
-      sendProgress(results.length, max, `🔄 Search loop ${stats.loops} — Found ${results.length}/${max}...`);
+      const resultsBeforeLoop = results.length;
+      sendProgress(results.length, max, `🔄 Loop ${stats.loops}/${maxLoops} — Found ${results.length}/${max}...`);
       
       for (const keyword of keywordList) {
         if (results.length >= max) break;
@@ -464,111 +472,87 @@ app.get('/api/extract-stream', async (req, res) => {
           if (results.length >= max) break;
           
           const queries = generateSearchQueries(keyword, platform);
-          const startIdx = (queryOffset % queries.length);
-          const queriesToUse = [...queries.slice(startIdx), ...queries.slice(0, startIdx)]; // ALL queries
+          // Pick different queries each loop
+          const queryIdx = (stats.loops - 1) % queries.length;
+          const query = queries[queryIdx];
           
-          for (const query of queriesToUse) {
+          if (!query) continue;
+          
+          stats.searched++;
+          
+          // Show the actual query being sent to Bright Data
+          const shortQuery = query.length > 60 ? query.substring(0, 60) + '...' : query;
+          sendProgress(results.length, max, `⚡ Query: "${shortQuery}"`);
+          
+          const searchResults = await brightDataSearch(query, { region, timeframe, limit: 20 });
+          
+          // Show what Bright Data returned
+          sendProgress(results.length, max, `✅ Got ${searchResults.length} results`);
+          
+          for (const result of searchResults) {
             if (results.length >= max) break;
+            if (!result.url || seenUrls.has(result.url)) continue;
+            seenUrls.add(result.url);
             
-            stats.searched++;
+            stats.analyzed++;
             
-            // Show the actual query being sent to Bright Data
-            const shortQuery = query.length > 60 ? query.substring(0, 60) + '...' : query;
-            sendProgress(results.length, max, `⚡ BRIGHT DATA API: Sending search query...`);
-            sendProgress(results.length, max, `📝 Query: "${shortQuery}"`);
-            sendProgress(results.length, max, `🌍 Region: ${region.toUpperCase()} | Timeframe: ${timeframe}`);
+            // Use snippet for SPEED
+            const content = `${result.title || ''} ${result.snippet || ''}`;
+            if (!content || content.length < 30) continue;
             
-            const searchResults = await brightDataSearch(query, { region, timeframe, limit: 20 }); // More results
+            const qualification = await qualifyLead(content, result.url, keyword);
             
-            // Show what Bright Data returned
-            sendProgress(results.length, max, `✅ BRIGHT DATA: Returned ${searchResults.length} results`);
+            // Show AI decision briefly
+            sendProgress(results.length, max, qualification.is_lead 
+              ? `✅ Lead found: ${qualification.name || 'Unknown'}` 
+              : `❌ Rejected: ${qualification.reason || 'Not a lead'}`);
             
-            // List the URLs found
-            if (searchResults.length > 0) {
-              searchResults.slice(0, 3).forEach((r, i) => {
-                const shortUrl = (r.url || '').replace(/https?:\/\/(www\.)?/, '').substring(0, 50);
-                sendProgress(results.length, max, `   ${i+1}. ${shortUrl}...`);
-              });
-              if (searchResults.length > 3) {
-                sendProgress(results.length, max, `   ... and ${searchResults.length - 3} more URLs`);
-              }
-            }
-            
-            for (const result of searchResults) {
-              if (results.length >= max) break;
-              if (!result.url || seenUrls.has(result.url)) continue;
-              seenUrls.add(result.url);
+            if (qualification.is_lead && (qualification.intent_score || 5) >= 3) {
+              const detectedPlatform = detectPlatform(result.url);
+              const hasRealEmail = qualification.email && 
+                qualification.email.includes('@') && 
+                /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(qualification.email);
               
-              // No limit - analyze everything until target reached
-              stats.analyzed++;
+              stats.qualified++;
               
-              // Show what we're analyzing
-              const shortUrl = result.url.replace(/https?:\/\/(www\.)?/, '').substring(0, 40);
-              sendProgress(results.length, max, `🔍 Analyzing: ${shortUrl}...`);
+              const contactInfo = hasRealEmail ? qualification.email : 
+                (qualification.username ? `DM: ${qualification.username}` : 'Visit Link');
               
-              // Use snippet for SPEED (page fetching is too slow for max output)
-              const content = `${result.title || ''} ${result.snippet || ''}`;
+              const lead = {
+                name: qualification.name || qualification.username || result.title?.substring(0, 30) || 'Lead',
+                email: contactInfo,
+                phone: qualification.phone || '-',
+                source: detectedPlatform,
+                query: keyword,
+                intent: qualification.intent || result.snippet?.substring(0, 100) || '',
+                intentScore: qualification.intent_score || 5,
+                url: result.url,
+                username: qualification.username || '',
+                contactMethod: hasRealEmail ? 'email' : 'dm'
+              };
               
-              if (!content || content.length < 30) {
-                continue;
-              }
-              sendProgress(results.length, max, `🤖 AI AGENT: Analyzing with Gemini AI...`);
-              sendProgress(results.length, max, `   → Checking if this is someone seeking "${keyword}" services`);
-              
-              const qualification = await qualifyLead(content, result.url, keyword);
-              
-              // Show AI decision
-              sendProgress(results.length, max, `🤖 AI DECISION:`);
-              sendProgress(results.length, max, `   → Is Lead: ${qualification.is_lead ? 'YES ✅' : 'NO ❌'}`);
-              sendProgress(results.length, max, `   → Intent Score: ${qualification.intent_score}/10`);
-              if (qualification.email) sendProgress(results.length, max, `   → Email Found: ${qualification.email}`);
-              if (qualification.username) sendProgress(results.length, max, `   → Username: ${qualification.username}`);
-              if (qualification.reason) sendProgress(results.length, max, `   → Reason: ${qualification.reason}`);
-              
-              if (!qualification.is_lead) {
-                sendProgress(results.length, max, `❌ SKIPPED: Not a potential customer`);
-              } else if (qualification.intent_score < 3) {
-                sendProgress(results.length, max, `⚠️ SKIPPED: Very low intent score (${qualification.intent_score}/10)`);
-              }
-              
-              if (qualification.is_lead && qualification.intent_score >= 3) { // Lowered threshold
-                const detectedPlatform = detectPlatform(result.url);
-                const hasRealEmail = qualification.email && 
-                  qualification.email.includes('@') && 
-                  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(qualification.email);
-                
-                // Accept ALL qualified leads - user can click link to contact
-                if (true) {
-                  stats.qualified++;
-                  
-                  const contactInfo = hasRealEmail ? qualification.email : 
-                    (qualification.username ? `DM: ${qualification.username}` : 'Visit Link');
-                  
-                  const lead = {
-                    name: qualification.name || qualification.username || result.title?.substring(0, 30) || 'Lead',
-                    email: contactInfo,
-                    phone: qualification.phone || '-',
-                    source: detectedPlatform,
-                    query: keyword,
-                    intent: qualification.intent || result.snippet?.substring(0, 100) || '',
-                    intentScore: qualification.intent_score,
-                    url: result.url,
-                    username: qualification.username || '',
-                    contactMethod: hasRealEmail ? 'email' : 'dm'
-                  };
-                  
-                  results.push(lead);
-                  sendLead(lead, results.length, max);
-                }
-              }
+              results.push(lead);
+              sendLead(lead, results.length, max);
             }
           }
         }
       }
-      queryOffset++;
+      
+      // Check if we found any new leads this loop
+      if (results.length === resultsBeforeLoop) {
+        noNewResultsCount++;
+        sendProgress(results.length, max, `⚠️ No new leads found (${noNewResultsCount}/3 empty loops)`);
+        if (noNewResultsCount >= 3) {
+          sendProgress(results.length, max, `🛑 Stopping: No more leads available`);
+          break;
+        }
+      } else {
+        noNewResultsCount = 0; // Reset if we found something
+      }
     }
     
     allLeads = results;
+    sendProgress(results.length, max, `✅ Search complete! Found ${results.length} leads.`);
     sendComplete(results, stats);
     
   } catch (err) {
