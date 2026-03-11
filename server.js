@@ -348,63 +348,59 @@ function detectPlatform(url) {
 // SEARCH QUERY GENERATOR - Aggressive search for people SEEKING services
 // ============================================================
 function generateSearchQueries(keyword, platform) {
-  // Queries focused on finding people who NEED the service (potential clients)
+  // Simpler queries that actually return results
   const queries = {
     google: [
-      `"I need" "${keyword}" "@gmail.com"`,
-      `"looking for" "${keyword}" "email me" OR "contact me"`,
-      `"help me with" "${keyword}" "@yahoo.com" OR "@hotmail.com"`,
-      `"hire" "${keyword}" "my email" OR "reach me"`,
-      `"seeking" "${keyword}" freelancer "budget"`,
-      `"can anyone recommend" "${keyword}" "email"`,
-      `"I'm looking for" "${keyword}" "@gmail.com" OR "@outlook.com"`
+      `${keyword} need help`,
+      `${keyword} looking for freelancer`,
+      `${keyword} hiring`,
+      `${keyword} need someone`,
+      `${keyword} recommendations`,
+      `looking for ${keyword}`,
+      `need ${keyword} help`
     ],
     reddit: [
-      `site:reddit.com/r/forhire "[Hiring]" ${keyword}`,
-      `site:reddit.com/r/forhire "Hiring" ${keyword}`,
-      `site:reddit.com "I need" ${keyword}`,
-      `site:reddit.com "looking for" ${keyword} help`,
-      `site:reddit.com "need help" ${keyword}`,
-      `site:reddit.com/r/freelance ${keyword} hiring`,
-      `site:reddit.com ${keyword} "budget" "looking for"`,
-      `site:reddit.com ${keyword} "can anyone recommend"`,
-      `site:reddit.com/r/slavelabour ${keyword}`
+      `site:reddit.com ${keyword} hiring`,
+      `site:reddit.com ${keyword} need help`,
+      `site:reddit.com ${keyword} looking for`,
+      `site:reddit.com/r/forhire ${keyword}`,
+      `site:reddit.com/r/freelance ${keyword}`,
+      `site:reddit.com ${keyword} recommend`,
+      `site:reddit.com ${keyword} budget`
     ],
     linkedin: [
-      `site:linkedin.com/posts "I need" "${keyword}" "help"`,
-      `site:linkedin.com/posts "looking for" "${keyword}" "recommendations"`,
-      `site:linkedin.com/posts "can anyone recommend" "${keyword}"`,
-      `site:linkedin.com/posts "hiring" "${keyword}"`,
-      `site:linkedin.com/feed "need help" "${keyword}"`
+      `site:linkedin.com ${keyword} hiring`,
+      `site:linkedin.com ${keyword} need`,
+      `site:linkedin.com ${keyword} looking for`,
+      `site:linkedin.com ${keyword} recommendations`
     ],
     twitter: [
-      `site:twitter.com "need" "${keyword}" "DM" OR "email"`,
-      `site:x.com "looking for" "${keyword}" "help"`,
-      `site:twitter.com "hiring" "${keyword}"`,
-      `site:twitter.com "anyone know" "${keyword}" "recommend"`
+      `site:twitter.com ${keyword} need`,
+      `site:twitter.com ${keyword} looking for`,
+      `site:twitter.com ${keyword} hiring`,
+      `site:x.com ${keyword} help`
     ],
     facebook: [
-      `site:facebook.com/groups "need" "${keyword}" "contact"`,
-      `site:facebook.com "looking for" "${keyword}" "email" OR "message"`,
-      `site:facebook.com "recommendations" "${keyword}" "budget"`
+      `site:facebook.com ${keyword} need`,
+      `site:facebook.com ${keyword} looking for`,
+      `site:facebook.com ${keyword} recommendations`
     ],
     instagram: [
-      `site:instagram.com "need" "${keyword}" "DM"`,
-      `site:instagram.com "looking for" "${keyword}"`
+      `site:instagram.com ${keyword} need`,
+      `site:instagram.com ${keyword} looking for`
     ],
     quora: [
-      `site:quora.com "where can I find" "${keyword}"`,
-      `site:quora.com "recommend" "${keyword}" "affordable"`,
-      `site:quora.com "how to hire" "${keyword}"`
+      `site:quora.com ${keyword} recommend`,
+      `site:quora.com ${keyword} how to find`,
+      `site:quora.com ${keyword} hire`
     ],
     craigslist: [
-      `site:craigslist.org/gig "${keyword}"`,
-      `site:craigslist.org "need" "${keyword}"`,
-      `site:craigslist.org "looking for" "${keyword}" "contact"`
+      `site:craigslist.org ${keyword}`,
+      `site:craigslist.org ${keyword} needed`
     ],
     upwork: [
-      `site:upwork.com/job "${keyword}"`,
-      `site:upwork.com/freelance-jobs "${keyword}"`
+      `site:upwork.com ${keyword}`,
+      `site:upwork.com ${keyword} job`
     ]
   };
   
