@@ -114,49 +114,30 @@ async function qualifyLead(pageContent, url, keyword) {
   }
 
   try {
-    const truncatedContent = pageContent.substring(0, 6000);
-    const isShortContent = pageContent.length < 500; // Snippet only
+    const truncatedContent = pageContent.substring(0, 3000); // Shorter for speed
     
-    const prompt = `TASK: Is this a POTENTIAL CUSTOMER seeking "${keyword}" services?
+    const prompt = `Is this someone who might need "${keyword}" services? Be LENIENT - we want more leads.
 
-CONTENT (${isShortContent ? 'snippet only - be lenient' : 'full page'}):
-${truncatedContent}
+CONTENT: ${truncatedContent}
 
-QUALIFY WITH 3 QUESTIONS:
+QUICK CHECK:
+1. Related to ${keyword}? (loosely counts)
+2. NOT a company selling services? (individuals, job posts = OK)
+3. Might need help? (questions, hiring, recommendations, discussions = OK)
 
-Q1 - TOPIC: Is this related to "${keyword}"?
-YES if: mentions ${keyword}, related terms, or the industry
-NO if: completely unrelated topic (food, random photos, etc)
+BE LENIENT: If 2 out of 3 are YES, set is_lead: true
+Only reject if it's CLEARLY a company ad or completely unrelated.
 
-Q2 - NOT A COMPANY: Is this NOT a company/service provider advertising?
-YES if: individual person, someone asking for help, job posting
-NO if: "We offer", "Our services", company name with Ltd/LLC/Inc, marketing content
-
-Q3 - SEEKING HELP: Does this person/post indicate they need services?
-YES if: "I need", "looking for", "[Hiring]", "help me", "anyone recommend", job posting, question asking for recommendations
-NO if: just discussing the topic, sharing info, tutorial/guide
-
-${isShortContent ? 'NOTE: This is a short snippet. If it LOOKS like someone seeking help, lean toward YES for Q3.' : ''}
-
-EXTRACT CONTACT INFO:
-- name: Real name if visible, otherwise username (without u/ or @ prefix)
-- email: ONLY if a real email is visible (e.g. john@gmail.com). Leave empty "" if not found
-- phone: Real phone if visible, otherwise "-"
-- username: Platform username if visible
-
-RESPOND WITH JSON ONLY:
+JSON ONLY:
 {
-  "q1_relevant": true/false,
-  "q2_not_company": true/false,
-  "q3_seeking_help": true/false,
-  "is_lead": true if ALL 3 questions are YES,
-  "name": "extracted name",
-  "email": "email or empty string",
-  "phone": "phone or -",
-  "username": "username",
-  "intent": "what they need (brief)",
+  "is_lead": true/false,
+  "name": "name or username",
+  "email": "email if found or empty",
+  "phone": "phone if found or -",
+  "username": "username if visible",
+  "intent": "what they might need",
   "intent_score": 1-10,
-  "reason": "why qualified/rejected"
+  "reason": "brief reason"
 }`;
 
     const response = await fetch(
@@ -472,9 +453,9 @@ app.get('/api/extract-stream', async (req, res) => {
     
     sendProgress(0, max, 'Starting search...');
     
-    while (results.length < max && stats.loops < 3) {
+    while (results.length < max && stats.loops < 6) {
       stats.loops++;
-      sendProgress(results.length, max, `Search loop ${stats.loops}/3...`);
+      sendProgress(results.length, max, `Search loop ${stats.loops}/6...`);
       
       for (const keyword of keywordList) {
         if (results.length >= max) break;
@@ -484,7 +465,7 @@ app.get('/api/extract-stream', async (req, res) => {
           
           const queries = generateSearchQueries(keyword, platform);
           const startIdx = (queryOffset % queries.length);
-          const queriesToUse = [...queries.slice(startIdx), ...queries.slice(0, startIdx)].slice(0, 1);
+          const queriesToUse = [...queries.slice(startIdx), ...queries.slice(0, startIdx)].slice(0, 2); // 2 queries per platform
           
           for (const query of queriesToUse) {
             if (results.length >= max) break;
@@ -497,7 +478,7 @@ app.get('/api/extract-stream', async (req, res) => {
             sendProgress(results.length, max, `📝 Query: "${shortQuery}"`);
             sendProgress(results.length, max, `🌍 Region: ${region.toUpperCase()} | Timeframe: ${timeframe}`);
             
-            const searchResults = await brightDataSearch(query, { region, timeframe, limit: 10 });
+            const searchResults = await brightDataSearch(query, { region, timeframe, limit: 20 }); // More results
             
             // Show what Bright Data returned
             sendProgress(results.length, max, `✅ BRIGHT DATA: Returned ${searchResults.length} results`);
@@ -518,30 +499,19 @@ app.get('/api/extract-stream', async (req, res) => {
               if (!result.url || seenUrls.has(result.url)) continue;
               seenUrls.add(result.url);
               
-              if (stats.analyzed >= 10 * stats.loops) continue; // Reduced since page fetch is slower
+              if (stats.analyzed >= 30 * stats.loops) continue; // More per loop
               stats.analyzed++;
               
               // Show what we're analyzing
               const shortUrl = result.url.replace(/https?:\/\/(www\.)?/, '').substring(0, 40);
               sendProgress(results.length, max, `🔍 Analyzing: ${shortUrl}...`);
               
-              // FETCH FULL PAGE CONTENT (not just snippet)
-              const snippetPreview = (result.snippet || '').substring(0, 80);
-              sendProgress(results.length, max, `📄 Snippet: "${snippetPreview}..."`);
+              // Use snippet for SPEED (page fetching is too slow for max output)
+              const content = `${result.title || ''} ${result.snippet || ''}`;
               
-              const { text: pageContent } = await fetchPageContent(result.url, sendProgress);
-              
-              // Use full page content if available, fall back to snippet
-              const content = pageContent && pageContent.length > 200 
-                ? pageContent 
-                : `${result.title || ''} ${result.snippet || ''}`;
-              
-              if (!content || content.length < 50) {
-                sendProgress(results.length, max, `⚠️ Skipped: No content retrieved`);
+              if (!content || content.length < 30) {
                 continue;
               }
-              
-              sendProgress(results.length, max, `📊 Content length: ${content.length} chars`);
               sendProgress(results.length, max, `🤖 AI AGENT: Analyzing with Gemini AI...`);
               sendProgress(results.length, max, `   → Checking if this is someone seeking "${keyword}" services`);
               
@@ -557,11 +527,11 @@ app.get('/api/extract-stream', async (req, res) => {
               
               if (!qualification.is_lead) {
                 sendProgress(results.length, max, `❌ SKIPPED: Not a potential customer`);
-              } else if (qualification.intent_score < 5) {
-                sendProgress(results.length, max, `⚠️ SKIPPED: Low intent score (${qualification.intent_score}/10)`);
+              } else if (qualification.intent_score < 3) {
+                sendProgress(results.length, max, `⚠️ SKIPPED: Very low intent score (${qualification.intent_score}/10)`);
               }
               
-              if (qualification.is_lead && qualification.intent_score >= 4) {
+              if (qualification.is_lead && qualification.intent_score >= 3) { // Lowered threshold
                 const detectedPlatform = detectPlatform(result.url);
                 const hasRealEmail = qualification.email && 
                   qualification.email.includes('@') && 
