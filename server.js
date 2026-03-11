@@ -453,9 +453,9 @@ app.get('/api/extract-stream', async (req, res) => {
     
     sendProgress(0, max, 'Starting search...');
     
-    while (results.length < max && stats.loops < 6) {
+    while (results.length < max) { // UNLIMITED - keep going until target reached
       stats.loops++;
-      sendProgress(results.length, max, `Search loop ${stats.loops}/6...`);
+      sendProgress(results.length, max, `🔄 Search loop ${stats.loops} — Found ${results.length}/${max}...`);
       
       for (const keyword of keywordList) {
         if (results.length >= max) break;
@@ -465,7 +465,7 @@ app.get('/api/extract-stream', async (req, res) => {
           
           const queries = generateSearchQueries(keyword, platform);
           const startIdx = (queryOffset % queries.length);
-          const queriesToUse = [...queries.slice(startIdx), ...queries.slice(0, startIdx)].slice(0, 2); // 2 queries per platform
+          const queriesToUse = [...queries.slice(startIdx), ...queries.slice(0, startIdx)]; // ALL queries
           
           for (const query of queriesToUse) {
             if (results.length >= max) break;
@@ -499,7 +499,7 @@ app.get('/api/extract-stream', async (req, res) => {
               if (!result.url || seenUrls.has(result.url)) continue;
               seenUrls.add(result.url);
               
-              if (stats.analyzed >= 30 * stats.loops) continue; // More per loop
+              // No limit - analyze everything until target reached
               stats.analyzed++;
               
               // Show what we're analyzing
